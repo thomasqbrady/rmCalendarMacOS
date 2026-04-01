@@ -13,6 +13,7 @@ class Rmcal < Formula
 
   def install
     venv = virtualenv_create(libexec, "python3.12")
+    venv.pip_install "hatchling"
     venv.pip_install_and_link buildpath
   end
 
