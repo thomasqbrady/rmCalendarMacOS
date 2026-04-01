@@ -138,7 +138,7 @@ def sync(ctx: click.Context) -> None:
     # Upload to cloud
     if ctx.obj["upload"]:
         from rmcal.remarkable.cloud import RemarkableCloud
-        from rmcal.state import get_cloud_doc_id, save_cloud_doc_id
+        from rmcal.state import get_cloud_doc_id, save_cloud_doc_id, clear_cloud_doc_id
 
         with RemarkableCloud() as cloud:
             if not cloud.is_authenticated:
@@ -155,6 +155,7 @@ def sync(ctx: click.Context) -> None:
                     click.echo("[rmcal] Updated successfully")
                 else:
                     click.echo("[rmcal] Previous doc not found, uploading new...")
+                    clear_cloud_doc_id()
                     doc_id = cloud.upload_new_document(document_name, pdf_path)
                     save_cloud_doc_id(doc_id)
                     click.echo(f"[rmcal] Uploaded as {doc_id}")

@@ -16,6 +16,7 @@ from textual.widgets import (
     Header,
     Input,
     Label,
+    LoadingIndicator,
     SelectionList,
     Static,
 )
@@ -346,6 +347,55 @@ class DoneScreen(ModalScreen):
     @on(Button.Pressed, "#done-ok")
     def on_ok(self) -> None:
         self.dismiss(True)
+
+
+class ProgressScreen(ModalScreen):
+    """Modal with an indeterminate progress indicator shown during generation/upload."""
+
+    CSS = """
+    ProgressScreen {
+        align: center middle;
+    }
+
+    #progress-dialog {
+        width: 50;
+        height: auto;
+        max-height: 10;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #progress-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #progress-status {
+        text-align: center;
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    #progress-loading {
+        height: 3;
+    }
+    """
+
+    def __init__(self, title: str = "Working...") -> None:
+        super().__init__()
+        self._title = title
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="progress-dialog"):
+            yield Static(self._title, id="progress-title")
+            yield Static("Preparing...", id="progress-status")
+            yield LoadingIndicator(id="progress-loading")
+
+    def update_status(self, msg: str) -> None:
+        """Update the status text from outside."""
+        self.query_one("#progress-status", Static).update(msg)
 
 
 class DaemonSetupScreen(ModalScreen):
@@ -767,18 +817,39 @@ class CalendarSelector(App):
         selected = self._get_selected_ids()
         meeting_notes_ids = result  # may be empty set (skip)
 
-        self._update_status("Generating...")
+        # Show progress modal to block interaction during generation/upload
+        self._progress_screen = ProgressScreen("Syncing to reMarkable")
+        self.push_screen(self._progress_screen)
         self.do_generate(selected, meeting_notes_ids)
+
+    def _update_progress(self, msg: str) -> None:
+        """Update the progress modal status text."""
+        if hasattr(self, "_progress_screen") and self._progress_screen:
+            self._progress_screen.update_status(msg)
+
+    def _dismiss_progress_and_show_done(self, msg: str) -> None:
+        """Dismiss the progress modal and show the done dialog."""
+        if hasattr(self, "_progress_screen") and self._progress_screen:
+            self._progress_screen.dismiss()
+            self._progress_screen = None
+        self._show_done(msg)
+
+    def _dismiss_progress_and_show_error(self, msg: str) -> None:
+        """Dismiss the progress modal and show an error in the status bar."""
+        if hasattr(self, "_progress_screen") and self._progress_screen:
+            self._progress_screen.dismiss()
+            self._progress_screen = None
+        self._update_status(msg)
 
     @work(thread=True)
     def do_generate(self, calendar_ids: set[str], meeting_notes_ids: set[str]) -> None:
         try:
             dr = self.date_range
-            self.call_from_thread(self._update_status, "Fetching events from macOS Calendar...")
+            self.call_from_thread(self._update_progress, "Fetching events from macOS Calendar...")
 
             events = fetch_macos_events(dr, calendar_ids=calendar_ids)
             self.call_from_thread(
-                self._update_status,
+                self._update_progress,
                 f"Found {len(events)} events. Generating PDF..."
             )
 
@@ -792,39 +863,44 @@ class CalendarSelector(App):
             pages = count_pages(config, events, meeting_notes_ids or None)
 
             if self._upload_cloud:
-                self.call_from_thread(self._update_status, "Uploading to reMarkable Cloud...")
+                self.call_from_thread(self._update_progress, "Uploading to reMarkable Cloud...")
                 from rmcal.remarkable.cloud import RemarkableCloud
-                from rmcal.state import get_cloud_doc_id, save_cloud_doc_id
+                from rmcal.state import get_cloud_doc_id, save_cloud_doc_id, clear_cloud_doc_id
 
                 with RemarkableCloud() as cloud:
                     if not cloud.is_authenticated:
                         self.call_from_thread(
-                            self._update_status,
-                            "ERROR: Not authenticated. Run 'python3 generate_my_planner.py register' first."
+                            self._dismiss_progress_and_show_error,
+                            "ERROR: Not authenticated. Run 'rmcal register' first."
                         )
                         return
 
                     saved_id = get_cloud_doc_id()
                     if saved_id:
+                        self.call_from_thread(self._update_progress, "Checking existing document...")
                         existing = cloud.find_document_by_id(saved_id)
                         if existing:
+                            self.call_from_thread(self._update_progress, "Updating existing document...")
                             cloud.update_document(existing, pdf_path)
                         else:
+                            self.call_from_thread(self._update_progress, "Uploading new document...")
+                            clear_cloud_doc_id()
                             doc_id = cloud.upload_new_document(self._document_name, pdf_path)
                             save_cloud_doc_id(doc_id)
                     else:
+                        self.call_from_thread(self._update_progress, "Uploading new document...")
                         doc_id = cloud.upload_new_document(self._document_name, pdf_path)
                         save_cloud_doc_id(doc_id)
 
                 msg = f"Synced to reMarkable Cloud!\n{size_kb:.0f} KB, {pages} pages, {len(events)} events"
-                self.call_from_thread(self._show_done, msg)
+                self.call_from_thread(self._dismiss_progress_and_show_done, msg)
             else:
                 msg = f"Done! Saved to {pdf_path}\n{size_kb:.0f} KB, {pages} pages, {len(events)} events"
-                self.call_from_thread(self._show_done, msg)
+                self.call_from_thread(self._dismiss_progress_and_show_done, msg)
         except Exception as e:
             import traceback
             traceback.print_exc()
-            self.call_from_thread(self._update_status, f"ERROR: {e}")
+            self.call_from_thread(self._dismiss_progress_and_show_error, f"ERROR: {e}")
 
     def action_quit(self) -> None:
         self.exit()

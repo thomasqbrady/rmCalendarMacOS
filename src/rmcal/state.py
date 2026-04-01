@@ -65,6 +65,13 @@ def save_cloud_doc_id(doc_id: str) -> None:
     save_state(state)
 
 
+def clear_cloud_doc_id() -> None:
+    """Clear the saved reMarkable Cloud document ID."""
+    state = load_state()
+    state.pop("cloud_doc_id", None)
+    save_state(state)
+
+
 def get_meeting_notes_calendar_ids() -> set[str] | None:
     """Get the saved meeting notes calendar selection. Returns None if never configured."""
     state = load_state()

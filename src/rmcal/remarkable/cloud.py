@@ -259,9 +259,15 @@ class RemarkableCloud:
                 "rm-source": "RoR-Browser",
             },
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Upload failed (HTTP {resp.status_code}): {resp.text}"
+            )
         data = resp.json()
-        return data["docID"]
+        doc_id = data.get("docID")
+        if not doc_id:
+            raise RuntimeError(f"Upload response missing docID: {data}")
+        return doc_id
 
     def list_documents(self) -> list[CloudDocument]:
         """List all documents in the cloud."""
@@ -321,8 +327,8 @@ class RemarkableCloud:
                         meta_blob = self._get_blob(f.hash)
                         metadata = json.loads(meta_blob)
                         break
-                # Skip deleted documents
-                if metadata.get("deleted", False):
+                # Skip deleted or trashed documents
+                if metadata.get("deleted", False) or metadata.get("parent") == "trash":
                     return None
                 return CloudDocument(
                     doc_id=entry.entry_id,
