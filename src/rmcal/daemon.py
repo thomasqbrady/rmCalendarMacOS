@@ -40,18 +40,18 @@ def install_daemon(document_name: str = "rmCalendarMacOS Planner") -> None:
     if rmcal_bin:
         program_args = f"""    <array>
         <string>{rmcal_bin}</string>
-        <string>sync</string>
         <string>--name</string>
         <string>{document_name}</string>
+        <string>sync</string>
     </array>"""
     else:
         program_args = f"""    <array>
         <string>{python_path}</string>
         <string>-m</string>
         <string>rmcal</string>
-        <string>sync</string>
         <string>--name</string>
         <string>{document_name}</string>
+        <string>sync</string>
     </array>"""
 
     plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
