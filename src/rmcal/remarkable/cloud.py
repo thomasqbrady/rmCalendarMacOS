@@ -321,6 +321,9 @@ class RemarkableCloud:
                         meta_blob = self._get_blob(f.hash)
                         metadata = json.loads(meta_blob)
                         break
+                # Skip deleted documents
+                if metadata.get("deleted", False):
+                    return None
                 return CloudDocument(
                     doc_id=entry.entry_id,
                     doc_hash=entry.hash,
