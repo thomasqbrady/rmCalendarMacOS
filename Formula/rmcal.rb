@@ -2,12 +2,11 @@ class Rmcal < Formula
   include Language::Python::Virtualenv
 
   desc "Sync macOS Calendar to reMarkable tablets as interactive PDF planners"
-  # TODO: Update these after creating the GitHub repo
-  homepage "https://github.com/OWNER/rmCalendarMacOS"
-  url "https://github.com/OWNER/rmCalendarMacOS/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
+  homepage "https://github.com/thomasqbrady/rmCalendarMacOS"
+  url "https://github.com/thomasqbrady/rmCalendarMacOS/archive/refs/tags/v0.1.1.tar.gz"
+  sha256 "084eef7c621813f2b5409ddc5fe453dd0de5edfc717751c42ede41450eb13e62"
   license "MIT"
-  head "https://github.com/OWNER/rmCalendarMacOS.git", branch: "main"
+  head "https://github.com/thomasqbrady/rmCalendarMacOS.git", branch: "main"
 
   depends_on :macos
   depends_on "python@3.12"
