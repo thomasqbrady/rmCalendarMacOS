@@ -12,10 +12,17 @@ class Rmcal < Formula
   depends_on "python@3.12"
 
   def install
-    venv = virtualenv_create(libexec, "python3.12")
-    system libexec/"bin/pip", "install", "hatchling"
-    system libexec/"bin/pip", "install", "--no-build-isolation", buildpath
-    (bin/"rmcal").write_env_script libexec/"bin/rmcal", PATH: "#{libexec}/bin:${PATH}"
+    python3 = "python3.12"
+    venv = libexec
+
+    # Create venv WITH pip
+    system python3, "-m", "venv", venv
+    system venv/"bin/pip", "install", "--upgrade", "pip"
+    system venv/"bin/pip", "install", "hatchling"
+    system venv/"bin/pip", "install", "--no-build-isolation", buildpath
+
+    # Link the binary
+    (bin/"rmcal").write_env_script venv/"bin/rmcal", PATH: "#{venv}/bin:${PATH}"
   end
 
   def caveats
