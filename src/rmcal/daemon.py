@@ -31,7 +31,7 @@ def is_daemon_running() -> bool:
         return False
 
 
-def install_daemon(document_name: str = "rmCalendarMacOS Planner") -> None:
+def install_daemon(document_name: str = "rmCalendar") -> None:
     """Install and load the launchd plist for 15-minute auto-sync."""
     python_path = sys.executable
 

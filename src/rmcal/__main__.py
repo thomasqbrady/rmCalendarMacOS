@@ -27,7 +27,7 @@ DEFAULT_OUTPUT = CONFIG_DIR / "planner.pdf"
               help="Output PDF path")
 @click.option("--start", default=None, help="Start date (YYYY-MM-DD)")
 @click.option("--end", default=None, help="End date (YYYY-MM-DD)")
-@click.option("--name", default="rmCalendarMacOS Planner", help="Document name on reMarkable")
+@click.option("--name", default="rmCalendar", help="Document name on reMarkable")
 @click.option("--no-upload", is_flag=True, help="Generate PDF only, skip cloud upload")
 @click.pass_context
 def cli(ctx: click.Context, output: Path, start: str | None, end: str | None,

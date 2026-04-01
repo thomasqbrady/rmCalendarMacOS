@@ -578,7 +578,7 @@ class CalendarSelector(App):
         start_date: date | None = None,
         end_date: date | None = None,
         upload_cloud: bool = False,
-        document_name: str = "rmCalendarMacOS Planner",
+        document_name: str = "rmCalendar",
     ):
         super().__init__()
         self.output_path = output_path
@@ -835,7 +835,7 @@ def run_tui(
     start_date: date | None = None,
     end_date: date | None = None,
     upload_cloud: bool = False,
-    document_name: str = "rmCalendarMacOS Planner",
+    document_name: str = "rmCalendar",
 ) -> None:
     """Launch the calendar selector TUI."""
     app = CalendarSelector(

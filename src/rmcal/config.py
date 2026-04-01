@@ -70,7 +70,7 @@ def _parse_config(raw: dict) -> AppConfig:
         user=rm_raw.get("user", "root"),
         auth=rm_raw.get("auth", ""),
         folder=rm_raw.get("folder", ""),
-        document_name=rm_raw.get("document_name", "rmCalendarMacOS Planner"),
+        document_name=rm_raw.get("document_name", "rmCalendar"),
     )
 
     ss_raw = raw.get("sleep_screen", {})

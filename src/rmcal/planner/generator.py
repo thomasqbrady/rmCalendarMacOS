@@ -71,8 +71,8 @@ def generate_planner(
 
     # Pass 2: Render all pages
     c = Canvas(str(output_path), pagesize=page_size)
-    c.setTitle(f"rmCalendarMacOS Planner")
-    c.setAuthor("rmCalendarMacOS")
+    c.setTitle("rmCalendar")
+    c.setAuthor("rmCalendar")
 
     year.render(c, nav, config, events, layout)
     month.render(c, nav, config, events, layout, meeting_events)

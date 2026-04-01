@@ -59,7 +59,7 @@ def test_find_existing_document():
     def read_file(path):
         if "abc-123.metadata" in path:
             return json.dumps({
-                "visibleName": "rmCalendarMacOS Planner",
+                "visibleName": "rmCalendar",
                 "type": "DocumentType",
                 "deleted": False,
             })
@@ -73,7 +73,7 @@ def test_find_existing_document():
 
     mock_ssh.read_file.side_effect = read_file
 
-    result = _find_existing_document(mock_ssh, "rmCalendarMacOS Planner")
+    result = _find_existing_document(mock_ssh, "rmCalendar")
     assert result == "abc-123"
 
 
@@ -87,5 +87,5 @@ def test_find_nonexistent_document():
         "deleted": False,
     })
 
-    result = _find_existing_document(mock_ssh, "rmCalendarMacOS Planner")
+    result = _find_existing_document(mock_ssh, "rmCalendar")
     assert result is None

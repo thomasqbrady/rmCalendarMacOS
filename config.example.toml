@@ -51,7 +51,7 @@ auth = ""
 # Parent folder UUID on device (empty string = root)
 folder = ""
 # Document name shown on reMarkable
-document_name = "rmCalendarMacOS Planner 2026"
+document_name = "rmCalendar"
 
 [sleep_screen]
 # Show today's events on the reMarkable sleep screen

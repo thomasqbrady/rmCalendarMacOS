@@ -107,7 +107,7 @@ class RemarkableConfig:
     user: str = "root"
     auth: str = ""  # password or path to SSH key
     folder: str = ""  # parent folder UUID on device
-    document_name: str = "rmCalendarMacOS Planner"
+    document_name: str = "rmCalendar"
 
 
 @dataclass(frozen=True)
