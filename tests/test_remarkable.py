@@ -6,8 +6,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rmcal.models import DateRange, RemarkableConfig
-from rmcal.remarkable.upload import _check_date_range, _find_existing_document
+try:
+    from rmcal.remarkable.upload import _check_date_range, _find_existing_document
+    from rmcal.models import DateRange, RemarkableConfig
+except ImportError:
+    pytest.skip("paramiko not installed (SSH upload tests)", allow_module_level=True)
+
 
 
 def test_check_date_range_no_state():
