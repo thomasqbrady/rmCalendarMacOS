@@ -66,7 +66,7 @@ def register() -> None:
     click.echo("reMarkable Cloud Registration")
     click.echo("=" * 40)
     click.echo()
-    click.echo("1. Go to: https://my.remarkable.com/connect/desktop")
+    click.echo("1. Go to: https://my.remarkable.com/device/remarkable?showOtp=true")
     click.echo("2. Log in and copy the 8-character code")
     click.echo()
 

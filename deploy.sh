@@ -82,8 +82,19 @@ git add Formula/rmcal.rb
 git commit -m "Update formula SHA for ${TAG}"
 git push
 
+# 9. Update the local Homebrew tap so brew sees the new version immediately
+echo "--- Updating local Homebrew tap"
+BREW_TAP="/opt/homebrew/Library/Taps/thomasqbrady/homebrew-remarkable"
+if [[ -d "$BREW_TAP" ]]; then
+    cd "$BREW_TAP"
+    git pull --rebase
+    cd - > /dev/null
+else
+    brew tap thomasqbrady/remarkable
+fi
+
 echo ""
 echo "==> Done! Deployed ${TAG}"
 echo ""
 echo "To install/upgrade:"
-echo "  brew update && brew reinstall rmcal"
+echo "  brew reinstall rmcal"

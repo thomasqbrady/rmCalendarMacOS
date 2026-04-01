@@ -244,7 +244,7 @@ class RegisterScreen(ModalScreen):
         with Vertical(id="register-dialog"):
             yield Static("reMarkable Cloud Registration", id="register-title")
             yield Static(
-                "1. Go to: https://my.remarkable.com/connect/desktop\n"
+                "1. Go to: https://my.remarkable.com/device/remarkable?showOtp=true\n"
                 "2. Log in and copy the 8-character code\n"
                 "3. Paste it below and press Register",
                 id="register-steps",
