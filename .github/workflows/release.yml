@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: pip install build
+        run: pip install build hatchling
 
       - name: Build sdist and wheel
         run: python -m build
@@ -47,11 +47,10 @@ jobs:
           SHA=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Clone tap repo
         run: |
-          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/thomasqbrady/homebrew-rmcal.git tap
+          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/thomasqbrady/homebrew-remarkable.git tap
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

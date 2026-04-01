@@ -13,8 +13,8 @@ class Rmcal < Formula
 
   def install
     venv = virtualenv_create(libexec, "python3.12")
-    venv.pip_install "hatchling"
-    venv.pip_install_and_link buildpath
+    system libexec/"bin/pip", "install", buildpath
+    (bin/"rmcal").write_env_script libexec/"bin/rmcal", PATH: "#{libexec}/bin:${PATH}"
   end
 
   def caveats
