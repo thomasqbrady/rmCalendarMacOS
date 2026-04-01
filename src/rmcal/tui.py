@@ -14,6 +14,7 @@ from textual.widgets import (
     Button,
     Footer,
     Header,
+    Input,
     Label,
     SelectionList,
     Static,
@@ -185,6 +186,117 @@ class MeetingNotesScreen(Screen):
     @on(Button.Pressed, "#mn-back")
     def on_back(self) -> None:
         self.action_back()
+
+
+class RegisterScreen(ModalScreen):
+    """Modal for first-time reMarkable Cloud registration."""
+
+    CSS = """
+    RegisterScreen {
+        align: center middle;
+    }
+
+    #register-dialog {
+        width: 65;
+        height: auto;
+        max-height: 20;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #register-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #register-steps {
+        margin-bottom: 1;
+        color: $text-muted;
+    }
+
+    #register-input {
+        margin-bottom: 1;
+    }
+
+    #register-status {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #register-buttons {
+        height: 3;
+        align: center middle;
+        layout: horizontal;
+    }
+
+    #register-buttons Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="register-dialog"):
+            yield Static("reMarkable Cloud Registration", id="register-title")
+            yield Static(
+                "1. Go to: https://my.remarkable.com/connect/desktop\n"
+                "2. Log in and copy the 8-character code\n"
+                "3. Paste it below and press Register",
+                id="register-steps",
+            )
+            yield Input(placeholder="Enter 8-character code", id="register-input")
+            yield Static("", id="register-status")
+            with Horizontal(id="register-buttons"):
+                yield Button("Register", id="register-submit", variant="success")
+                yield Button("Cancel", id="register-cancel", variant="default")
+
+    def on_mount(self) -> None:
+        self.query_one("#register-input", Input).focus()
+
+    @on(Input.Submitted, "#register-input")
+    def on_input_submitted(self) -> None:
+        self._do_register()
+
+    @on(Button.Pressed, "#register-submit")
+    def on_submit(self) -> None:
+        self._do_register()
+
+    @on(Button.Pressed, "#register-cancel")
+    def on_cancel(self) -> None:
+        self.dismiss(False)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    @work(thread=True)
+    def _do_register(self) -> None:
+        code = self.app.call_from_thread(self._get_code)
+        if not code:
+            self.app.call_from_thread(self._set_status, "Please enter a code.")
+            return
+
+        self.app.call_from_thread(self._set_status, "Registering...")
+        try:
+            from rmcal.remarkable.cloud import RemarkableCloud
+            with RemarkableCloud() as cloud:
+                cloud.register_device(code)
+            self.app.call_from_thread(self._set_status, "Success!")
+            import time
+            time.sleep(1)
+            self.app.call_from_thread(self.dismiss, True)
+        except Exception as e:
+            self.app.call_from_thread(self._set_status, f"Error: {e}")
+
+    def _get_code(self) -> str:
+        return self.query_one("#register-input", Input).value.strip()
+
+    def _set_status(self, msg: str) -> None:
+        self.query_one("#register-status", Static).update(msg)
 
 
 class DoneScreen(ModalScreen):
@@ -505,7 +617,25 @@ class CalendarSelector(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.load_calendars()
+        if self._upload_cloud:
+            self._check_cloud_auth()
+        else:
+            self.load_calendars()
+
+    def _check_cloud_auth(self) -> None:
+        from rmcal.remarkable.cloud import TOKEN_FILE
+        if TOKEN_FILE.exists():
+            self.load_calendars()
+        else:
+            self.push_screen(RegisterScreen(), self._on_register_done)
+
+    def _on_register_done(self, success: bool) -> None:
+        if success:
+            self.load_calendars()
+        else:
+            self._update_status("Registration cancelled. Cloud upload disabled.")
+            self._upload_cloud = False
+            self.load_calendars()
 
     @work(thread=True)
     def load_calendars(self) -> None:
