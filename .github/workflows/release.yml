@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Run tests
+        run: |
+          pip install -e ".[dev]"
+          pytest tests/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  update-formula:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          SHA=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        run: |
+          sed -i "s|PLACEHOLDER_SHA256|${{ steps.sha.outputs.sha256 }}|" Formula/rmcal.rb
+          sed -i "s|v0.1.0|${{ steps.sha.outputs.tag }}|" Formula/rmcal.rb
+          echo "Updated formula with SHA256: ${{ steps.sha.outputs.sha256 }}"
+          cat Formula/rmcal.rb

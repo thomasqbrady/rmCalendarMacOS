@@ -1,0 +1,58 @@
+# rmCalendarMacOS Configuration
+# Copy this file to ~/.config/rmcal/config.toml and edit it.
+
+[planner]
+# Date range: use "auto" for current month through 12 months, or ISO dates
+start_date = "auto"
+end_date = "auto"
+
+# Page size: "A4" or "letter"
+page_size = "A4"
+
+# Device: "rm2" or "paper_pro"
+device = "rm2"
+
+# Week start: "monday" or "sunday"
+week_start = "monday"
+
+# Time format: "24h" or "12h"
+time_format = "24h"
+
+# Daily schedule hour range
+day_start_hour = 7
+day_end_hour = 22
+
+# Handedness: "right" or "left" (affects navigation link placement)
+handedness = "right"
+
+# Language: "en", "fr", "es", "it", "de", "ja"
+language = "en"
+
+# Add your calendar ICS feed URLs below.
+# Google Calendar: Settings > Calendar > "Secret address in iCal format"
+# Outlook: Calendar > Shared calendars > Publish > ICS link
+# Apple iCloud: Share calendar > Public Calendar > copy URL
+
+[[calendars]]
+name = "Work"
+url = "https://calendar.google.com/calendar/ical/YOUR_ID/basic.ics"
+prefix = "W"  # optional short prefix shown before event names
+
+[[calendars]]
+name = "Personal"
+url = "webcal://p42-caldav.icloud.com/YOUR_ID/YOUR_CALENDAR.ics"
+
+[remarkable]
+# reMarkable USB IP (default), or WiFi IP from Settings > General > About
+host = "10.11.99.1"
+user = "root"
+# SSH password from Settings > General > About > Password (or path to SSH key)
+auth = ""
+# Parent folder UUID on device (empty string = root)
+folder = ""
+# Document name shown on reMarkable
+document_name = "rmCalendarMacOS Planner 2026"
+
+[sleep_screen]
+# Show today's events on the reMarkable sleep screen
+enabled = false
