@@ -35,12 +35,10 @@ jobs:
           files: dist/*
           generate_release_notes: true
 
-  update-formula:
+  update-tap:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Compute SHA256
         id: sha
         run: |
@@ -51,9 +49,21 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Clone tap repo
+        run: |
+          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/thomasqbrady/homebrew-rmcal.git tap
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Update formula
         run: |
-          sed -i "s|PLACEHOLDER_SHA256|${{ steps.sha.outputs.sha256 }}|" Formula/rmcal.rb
-          sed -i "s|v0.1.0|${{ steps.sha.outputs.tag }}|" Formula/rmcal.rb
-          echo "Updated formula with SHA256: ${{ steps.sha.outputs.sha256 }}"
-          cat Formula/rmcal.rb
+          cd tap
+          sed -i "s|sha256 \".*\"|sha256 \"${{ steps.sha.outputs.sha256 }}\"|" Formula/rmcal.rb
+          sed -i "s|/tags/v[0-9.]*\.tar\.gz|/tags/${{ steps.sha.outputs.tag }}.tar.gz|" Formula/rmcal.rb
+
+      - name: Commit and push
+        run: |
+          cd tap
+          git add Formula/rmcal.rb
+          git diff --cached --quiet && echo "No changes" || (git commit -m "Update rmcal to ${{ steps.sha.outputs.tag }}" && git push)
