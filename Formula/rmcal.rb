@@ -27,11 +27,10 @@ class Rmcal < Formula
 
   def caveats
     <<~EOS
-      To get started:
-        1. Register your reMarkable: rmcal register
-        2. Launch the TUI:           rmcal
+      To get started, just run:
+        rmcal
 
-      macOS will prompt for calendar access on first run.
+      You'll be guided through setup on first launch.
 
       To enable auto-sync (every 15 min):
         rmcal daemon install
