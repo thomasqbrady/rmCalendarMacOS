@@ -259,7 +259,7 @@ class RemarkableCloud:
                 "rm-source": "RoR-Browser",
             },
         )
-        if resp.status_code != 200:
+        if resp.status_code not in (200, 201):
             raise RuntimeError(
                 f"Upload failed (HTTP {resp.status_code}): {resp.text}"
             )
