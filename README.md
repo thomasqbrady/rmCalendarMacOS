@@ -2,14 +2,14 @@
 
 Sync your macOS Calendar to a reMarkable tablet as an interactive PDF planner — with clickable navigation between year, month, week, and day views, plus dedicated meeting notes pages with attendee lists and lined writing space.
 
-The planner auto-syncs every 15 minutes in the background. Your handwritten annotations are preserved across syncs.
+The planner auto-syncs every 5 minutes in the background. Your handwritten annotations are preserved across syncs.
 
 ## Features
 
 - **Interactive PDF planner** with year, month, week, and day views linked together
 - **Meeting notes pages** with time, attendees, and lined space for each meeting
 - **Clickable navigation** — tap dates, week numbers, and meeting entries to jump between views
-- **Auto-sync** via a background daemon (every 15 minutes, no terminal needed)
+- **Auto-sync** via a background daemon (every 5 minutes, no terminal needed)
 - **Annotation preservation** — handwritten notes on your reMarkable survive each sync
 - **12-hour time format** throughout
 - **TUI setup** — guided first-run experience handles cloud registration, calendar selection, and meeting notes configuration
@@ -53,7 +53,7 @@ Enable background sync so your planner stays up to date:
 rmcal daemon install
 ```
 
-This installs a macOS launchd daemon that runs `rmcal sync` every 15 minutes. No terminal window needed — it runs silently in the background, even after reboot.
+This installs a macOS launchd daemon that runs `rmcal sync` every 5 minutes. No terminal window needed — it runs silently in the background, even after reboot.
 
 ```bash
 rmcal daemon status      # Check if the daemon is running

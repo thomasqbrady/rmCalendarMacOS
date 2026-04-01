@@ -401,7 +401,7 @@ class DaemonSetupScreen(ModalScreen):
             yield Static("Enable auto-sync?", id="daemon-setup-title")
             yield Static(
                 "rmCalendarMacOS can sync your planner to reMarkable "
-                "automatically every 15 minutes in the background. "
+                "automatically every 5 minutes in the background. "
                 "No terminal needed.",
                 id="daemon-setup-desc",
             )
@@ -476,7 +476,7 @@ class DaemonStatusScreen(ModalScreen):
         running = is_daemon_running()
 
         if running:
-            status_text = "Status: Running (syncs every 15 min)"
+            status_text = "Status: Running (syncs every 5 min)"
             log_text = f"Log: {get_daemon_log_path()}"
             info = f"{status_text}\n{log_text}"
         elif installed:
@@ -721,7 +721,7 @@ class CalendarSelector(App):
         if result == "stopped":
             self._update_status("Auto-sync stopped")
         elif result == "started":
-            self._update_status("Auto-sync enabled (every 15 min)")
+            self._update_status("Auto-sync enabled (every 5 min)")
 
     @on(SelectionList.SelectedChanged)
     def on_selection_changed(self) -> None:

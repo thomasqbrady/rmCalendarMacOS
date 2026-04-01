@@ -226,7 +226,7 @@ def daemon_install(ctx: click.Context) -> None:
 
     install_daemon(document_name=ctx.obj["name"])
     click.echo(f"Installed launchd plist: {PLIST_PATH}")
-    click.echo("Daemon started! It will sync every 15 minutes.")
+    click.echo("Daemon started! It will sync every 5 minutes.")
     click.echo(f"Logs: {get_daemon_log_path()}")
     click.echo()
     click.echo("To stop:  rmcal daemon uninstall")
@@ -256,7 +256,7 @@ def daemon_status() -> None:
         return
 
     if is_daemon_running():
-        click.echo("Auto-sync daemon: running (every 15 min)")
+        click.echo("Auto-sync daemon: running (every 5 min)")
     else:
         click.echo("Auto-sync daemon: installed but not running")
 

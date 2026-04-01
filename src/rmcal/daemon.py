@@ -63,7 +63,7 @@ def install_daemon(document_name: str = "rmCalendar") -> None:
     <key>ProgramArguments</key>
 {program_args}
     <key>StartInterval</key>
-    <integer>900</integer>
+    <integer>300</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
