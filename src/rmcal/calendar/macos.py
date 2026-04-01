@@ -42,6 +42,9 @@ def _get_store():
             "Calendar access denied. Grant access in "
             "System Settings > Privacy & Security > Calendars."
         )
+    # Force EventKit to refresh from the backing store so we pick up
+    # recent edits (e.g. attendee changes on recurring events).
+    store.refreshSourcesIfNecessary()
     return store
 
 
