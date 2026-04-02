@@ -42,14 +42,15 @@ def generate_planner(
     events: list[Event],
     output_path: Path | None = None,
     meeting_notes_calendar_ids: set[str] | None = None,
-) -> Path:
+) -> tuple[Path, dict[str, int]]:
     """Generate a complete PDF planner.
 
     Uses a two-pass approach:
     1. Assign deterministic page numbers to all views
     2. Render all pages with correct cross-page navigation links
 
-    Returns the path to the generated PDF.
+    Returns (path_to_pdf, page_manifest) where page_manifest maps
+    bookmark names to page indices for annotation preservation.
     """
     if config.language == Language.JA:
         register_cjk_fonts()
@@ -94,7 +95,7 @@ def generate_planner(
 
     c.save()
 
-    return output_path
+    return output_path, nav.page_manifest
 
 
 def count_pages(

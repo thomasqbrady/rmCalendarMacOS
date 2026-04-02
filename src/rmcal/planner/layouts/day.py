@@ -250,28 +250,28 @@ def _render_day_page(
                 c.setFillColorRGB(*GRAY)
                 c.drawString(text_x, line3_y, loc_text)
 
-        elif ev_height >= compact_2line:
-            # Compact: time (TINY) + name (SMALL)
-            time_text = _truncate(c, f"{time_str} - {end_str}", available_w, font, TINY_SIZE)
-            name_text = _truncate(c, name_text, available_w, font_bold, SMALL_SIZE)
-            line1_y = ev_top - TINY_SIZE - pad
-            line2_y = line1_y - SMALL_SIZE - pad
-
-            c.setFont(font, TINY_SIZE)
-            c.setFillColorRGB(*GRAY)
-            c.drawString(text_x, line1_y, time_text)
-
-            c.setFont(font_bold, SMALL_SIZE)
-            c.setFillColorRGB(*BLACK)
-            c.drawString(text_x, line2_y, name_text)
-
         else:
-            # Tiny: just the name, smallest readable size
-            name_text = _truncate(c, name_text, available_w, font_bold, TINY_SIZE)
-            line1_y = ev_top - TINY_SIZE - pad
-            c.setFont(font_bold, TINY_SIZE)
+            # Compact/tiny: single line, vertically centered.
+            # Name first (bold), then time after it (gray) if it fits.
+            font_size = SMALL_SIZE if ev_height >= compact_2line else TINY_SIZE
+            name_text = _truncate(c, name_text, available_w, font_bold, font_size)
+            line_y = ev_bottom + (ev_height - font_size) / 2
+
+            c.setFont(font_bold, font_size)
             c.setFillColorRGB(*BLACK)
-            c.drawString(text_x, line1_y, name_text)
+            c.drawString(text_x, line_y, name_text)
+
+            # Append time after name if space remains
+            name_w = c.stringWidth(name_text, font_bold, font_size)
+            time_gap = 2 * mm
+            remaining_w = available_w - name_w - time_gap
+            if remaining_w > 0:
+                full_time = f"{time_str} - {end_str}"
+                time_text = _truncate(c, full_time, remaining_w, font, font_size)
+                if time_text != "...":
+                    c.setFont(font, font_size)
+                    c.setFillColorRGB(*GRAY)
+                    c.drawString(text_x + name_w + time_gap, line_y, time_text)
 
         c.restoreState()
 

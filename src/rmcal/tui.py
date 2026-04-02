@@ -854,7 +854,7 @@ class CalendarSelector(App):
             )
 
             config = PlannerConfig(date_range=dr)
-            pdf_path = generate_planner(
+            pdf_path, page_manifest = generate_planner(
                 config, events,
                 output_path=self.output_path,
                 meeting_notes_calendar_ids=meeting_notes_ids or None,
@@ -865,7 +865,12 @@ class CalendarSelector(App):
             if self._upload_cloud:
                 self.call_from_thread(self._update_progress, "Uploading to reMarkable Cloud...")
                 from rmcal.remarkable.cloud import RemarkableCloud
-                from rmcal.state import get_cloud_doc_id, save_cloud_doc_id, clear_cloud_doc_id
+                from rmcal.state import (
+                    get_cloud_doc_id, save_cloud_doc_id, clear_cloud_doc_id,
+                    get_page_manifest, save_page_manifest,
+                )
+
+                old_manifest = get_page_manifest()
 
                 with RemarkableCloud() as cloud:
                     if not cloud.is_authenticated:
@@ -881,7 +886,11 @@ class CalendarSelector(App):
                         existing = cloud.find_document_by_id(saved_id)
                         if existing:
                             self.call_from_thread(self._update_progress, "Updating existing document...")
-                            cloud.update_document(existing, pdf_path)
+                            cloud.update_document(
+                                existing, pdf_path,
+                                old_manifest=old_manifest,
+                                new_manifest=page_manifest,
+                            )
                         else:
                             self.call_from_thread(self._update_progress, "Uploading new document...")
                             clear_cloud_doc_id()
@@ -891,6 +900,8 @@ class CalendarSelector(App):
                         self.call_from_thread(self._update_progress, "Uploading new document...")
                         doc_id = cloud.upload_new_document(self._document_name, pdf_path)
                         save_cloud_doc_id(doc_id)
+
+                save_page_manifest(page_manifest)
 
                 msg = f"Synced to reMarkable Cloud!\n{size_kb:.0f} KB, {pages} pages, {len(events)} events"
                 self.call_from_thread(self._dismiss_progress_and_show_done, msg)

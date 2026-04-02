@@ -100,7 +100,10 @@ def sync(ctx: click.Context) -> None:
     from rmcal.daemon import maybe_fix_stale_plist
     from rmcal.models import DateRange, PlannerConfig
     from rmcal.planner.generator import generate_planner
-    from rmcal.state import get_meeting_notes_calendar_ids, get_selected_calendar_ids
+    from rmcal.state import (
+        get_meeting_notes_calendar_ids, get_selected_calendar_ids,
+        get_page_manifest, save_page_manifest,
+    )
 
     # Self-heal: if the daemon plist has a stale versioned Cellar path,
     # rewrite it now (runs as the real user, not Homebrew's sandbox).
@@ -143,7 +146,7 @@ def sync(ctx: click.Context) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     config = PlannerConfig(date_range=dr)
     meeting_notes_ids = get_meeting_notes_calendar_ids()
-    pdf_path = generate_planner(
+    pdf_path, page_manifest = generate_planner(
         config, events, output_path=output,
         meeting_notes_calendar_ids=meeting_notes_ids,
     )
@@ -153,6 +156,8 @@ def sync(ctx: click.Context) -> None:
     if ctx.obj["upload"]:
         from rmcal.remarkable.cloud import RemarkableCloud
         from rmcal.state import get_cloud_doc_id, save_cloud_doc_id, clear_cloud_doc_id
+
+        old_manifest = get_page_manifest()
 
         with RemarkableCloud() as cloud:
             if not cloud.is_authenticated:
@@ -165,7 +170,11 @@ def sync(ctx: click.Context) -> None:
                 existing = cloud.find_document_by_id(saved_id)
                 if existing:
                     _log("Updating existing document...")
-                    cloud.update_document(existing, pdf_path)
+                    cloud.update_document(
+                        existing, pdf_path,
+                        old_manifest=old_manifest,
+                        new_manifest=page_manifest,
+                    )
                     _log("Updated successfully")
                 else:
                     _log("Previous doc not found, uploading new...")
@@ -179,6 +188,8 @@ def sync(ctx: click.Context) -> None:
                 save_cloud_doc_id(doc_id)
                 _log(f"Uploaded as {doc_id}")
 
+    # Save manifest for next sync's annotation preservation
+    save_page_manifest(page_manifest)
     _log("Done!")
 
 
@@ -220,7 +231,7 @@ def generate(ctx: click.Context, output: Path | None) -> None:
     out = output or Path("planner.pdf")
     config = PlannerConfig(date_range=dr)
     meeting_notes_ids = get_meeting_notes_calendar_ids()
-    pdf_path = generate_planner(
+    pdf_path, _ = generate_planner(
         config, events, output_path=out,
         meeting_notes_calendar_ids=meeting_notes_ids,
     )

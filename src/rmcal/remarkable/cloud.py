@@ -425,21 +425,35 @@ class RemarkableCloud:
         # Use the simple API for new uploads
         return self.upload_simple(name, pdf_path)
 
-    def update_document(self, doc: CloudDocument, pdf_path: Path) -> None:
+    def update_document(
+        self,
+        doc: CloudDocument,
+        pdf_path: Path,
+        old_manifest: dict[str, int] | None = None,
+        new_manifest: dict[str, int] | None = None,
+    ) -> None:
         """Update an existing document's PDF while preserving annotations.
 
         Replaces the PDF blob, updates metadata, keeps all .rm annotation files.
+        When old_manifest and new_manifest are provided, remaps page UUIDs so
+        annotations stay on the correct page even when pages are added/removed.
         """
         max_retries = 5
         for attempt in range(max_retries):
             try:
-                self._do_update(doc, pdf_path)
+                self._do_update(doc, pdf_path, old_manifest, new_manifest)
                 return
             except GenerationConflict:
                 if attempt == max_retries - 1:
                     raise
 
-    def _do_update(self, doc: CloudDocument, pdf_path: Path) -> None:
+    def _do_update(
+        self,
+        doc: CloudDocument,
+        pdf_path: Path,
+        old_manifest: dict[str, int] | None = None,
+        new_manifest: dict[str, int] | None = None,
+    ) -> None:
         """Perform the actual document update (supports v3 and v4 schemas)."""
         doc_id = doc.doc_id
         pdf_data = pdf_path.read_bytes()
@@ -461,17 +475,34 @@ class RemarkableCloud:
         doc_blob = self._get_blob(doc_entry.hash)
         file_entries = self._parse_entries(doc_blob)
 
-        # Build new file entries — replace PDF and metadata, keep everything else
+        # If we have manifests, compute smart page UUID mapping
+        content_entry = None
+        new_content_bytes: bytes | None = None
+        if old_manifest and new_manifest:
+            new_content_bytes, pdf_data = self._remap_pages(
+                doc_id, file_entries, pdf_path, pdf_data,
+                old_manifest, new_manifest,
+            )
+
+        # Build new file entries — replace PDF, metadata, and content
         new_file_entries: list[RawEntry] = []
 
         for f in file_entries:
             if f.entry_id.endswith(".pdf"):
-                # Replace PDF
+                # Replace PDF (may have blank pages inserted)
                 pdf_hash = _sha256(pdf_data)
                 self._put_blob(pdf_hash, pdf_data, f"{doc_id}.pdf")
                 new_file_entries.append(RawEntry(
                     hash=pdf_hash, entry_type=FILE_TYPE,
                     entry_id=f.entry_id, size=len(pdf_data),
+                ))
+            elif f.entry_id.endswith(".content") and new_content_bytes:
+                # Replace .content with remapped page UUIDs
+                content_hash = _sha256(new_content_bytes)
+                self._put_blob(content_hash, new_content_bytes, f"{doc_id}.content")
+                new_file_entries.append(RawEntry(
+                    hash=content_hash, entry_type=FILE_TYPE,
+                    entry_id=f.entry_id, size=len(new_content_bytes),
                 ))
             elif f.entry_id.endswith(".metadata"):
                 # Update metadata timestamp
@@ -486,7 +517,7 @@ class RemarkableCloud:
                     entry_id=f.entry_id, size=len(meta_bytes),
                 ))
             else:
-                # Keep annotations, content, pagedata, etc. as-is
+                # Keep annotations, pagedata, etc. as-is
                 new_file_entries.append(f)
 
         # Build and upload new document index
@@ -518,6 +549,63 @@ class RemarkableCloud:
 
         # Commit the new root
         self._put_root_hash(new_root_hash, generation)
+
+    def _remap_pages(
+        self,
+        doc_id: str,
+        file_entries: list[RawEntry],
+        pdf_path: Path,
+        pdf_data: bytes,
+        old_manifest: dict[str, int],
+        new_manifest: dict[str, int],
+    ) -> tuple[bytes, bytes]:
+        """Remap page UUIDs and insert blank carrier pages for orphaned annotations.
+
+        Returns (new_content_bytes, new_pdf_data).
+        """
+        from rmcal.remarkable.annotations import (
+            build_content_json,
+            compute_page_mapping,
+            insert_blank_pages,
+        )
+
+        # Find and parse the existing .content file
+        existing_content: dict | None = None
+        old_uuids: list[str] = []
+        for f in file_entries:
+            if f.entry_id.endswith(".content"):
+                content_blob = self._get_blob(f.hash)
+                existing_content = json.loads(content_blob)
+                old_uuids = existing_content.get("pages", [])
+                break
+
+        if not old_uuids:
+            # No existing content — nothing to remap
+            from pypdf import PdfReader
+            import io
+            page_count = len(PdfReader(io.BytesIO(pdf_data)).pages)
+            new_uuids = [str(uuid.uuid4()) for _ in range(page_count)]
+            content = build_content_json(new_uuids, existing_content)
+            return json.dumps(content).encode(), pdf_data
+
+        # Count pages in the new PDF
+        from pypdf import PdfReader
+        import io
+        new_page_count = len(PdfReader(io.BytesIO(pdf_data)).pages)
+
+        # Compute the mapping
+        final_uuids, blank_indices = compute_page_mapping(
+            old_manifest, new_manifest, new_page_count, old_uuids,
+        )
+
+        # Insert blank pages into the PDF if needed
+        if blank_indices:
+            insert_blank_pages(pdf_path, blank_indices)
+            pdf_data = pdf_path.read_bytes()
+
+        # Build updated .content
+        content = build_content_json(final_uuids, existing_content)
+        return json.dumps(content).encode(), pdf_data
 
     def _load_tokens(self) -> None:
         if TOKEN_FILE.exists():

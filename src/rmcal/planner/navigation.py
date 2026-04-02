@@ -25,6 +25,11 @@ class NavigationRegistry:
             return 0
         return max(self._page_index.values()) + 1
 
+    @property
+    def page_manifest(self) -> dict[str, int]:
+        """Return a copy of the bookmark→page_index mapping."""
+        return dict(self._page_index)
+
     # Bookmark name generators — deterministic naming scheme
 
     @staticmethod

@@ -118,10 +118,12 @@ def test_generate_pdf_produces_correct_page_count(tmp_path: Path):
     ]
 
     output = tmp_path / "test_planner.pdf"
-    result = generate_planner(config, events, output_path=output)
+    result, manifest = generate_planner(config, events, output_path=output)
 
     assert result.exists()
     assert result.stat().st_size > 0
+    assert isinstance(manifest, dict)
+    assert len(manifest) > 0
 
     from pypdf import PdfReader
     reader = PdfReader(str(result))
@@ -133,10 +135,11 @@ def test_generate_pdf_with_no_events(tmp_path: Path):
         date_range=DateRange(start=date(2026, 4, 1), end=date(2026, 4, 7)),
     )
     output = tmp_path / "empty_planner.pdf"
-    result = generate_planner(config, [], output_path=output)
+    result, manifest = generate_planner(config, [], output_path=output)
 
     assert result.exists()
     assert result.stat().st_size > 0
+    assert isinstance(manifest, dict)
 
     from pypdf import PdfReader
     reader = PdfReader(str(result))
@@ -278,3 +281,129 @@ class TestCalendarColors:
             assert 0.0 <= r <= 1.0
             assert 0.0 <= g <= 1.0
             assert 0.0 <= b <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# Annotation preservation tests
+# ---------------------------------------------------------------------------
+
+from rmcal.remarkable.annotations import (
+    compute_page_mapping,
+    _find_insertion_point,
+    build_content_json,
+)
+
+
+class TestAnnotationPreservation:
+    """Tests for bookmark-based page UUID remapping."""
+
+    def test_identical_manifests_reuse_all_uuids(self):
+        """When nothing changes, all UUIDs are reused."""
+        manifest = {"year-2026": 0, "month-2026-04": 1, "day-2026-04-01": 2}
+        old_uuids = ["uuid-0", "uuid-1", "uuid-2"]
+        final, blanks = compute_page_mapping(manifest, manifest, 3, old_uuids)
+        assert final == old_uuids
+        assert blanks == []
+
+    def test_added_page_gets_new_uuid(self):
+        """A new page in the new manifest gets a fresh UUID."""
+        old = {"day-2026-04-01": 0, "day-2026-04-02": 1}
+        new = {"day-2026-04-01": 0, "day-2026-04-02": 1, "day-2026-04-03": 2}
+        old_uuids = ["uuid-0", "uuid-1"]
+        final, blanks = compute_page_mapping(old, new, 3, old_uuids)
+        assert final[0] == "uuid-0"
+        assert final[1] == "uuid-1"
+        assert final[2] != "uuid-0" and final[2] != "uuid-1"  # new UUID
+        assert blanks == []
+
+    def test_removed_meeting_creates_blank_after_day(self):
+        """Deleting a meeting inserts a blank page after the day page."""
+        old = {
+            "day-2026-04-02": 0,
+            "meeting-2026-04-02-0": 1,
+            "day-2026-04-03": 2,
+        }
+        new = {
+            "day-2026-04-02": 0,
+            "day-2026-04-03": 1,
+        }
+        old_uuids = ["uuid-day2", "uuid-meeting", "uuid-day3"]
+        final, blanks = compute_page_mapping(old, new, 2, old_uuids)
+        # The orphaned meeting page should be inserted after day-2026-04-02
+        assert blanks == [1]
+        assert "uuid-meeting" in final
+        # day-2026-04-02 keeps its UUID
+        assert final[0] == "uuid-day2"
+        # The meeting's blank carrier is at position 1
+        assert final[1] == "uuid-meeting"
+        # day-2026-04-03 keeps its UUID
+        assert final[2] == "uuid-day3"
+
+    def test_multiple_orphans_same_day(self):
+        """Multiple meeting notes deleted from the same day."""
+        old = {
+            "day-2026-04-02": 0,
+            "meeting-2026-04-02-0": 1,
+            "meeting-2026-04-02-1": 2,
+            "day-2026-04-03": 3,
+        }
+        new = {
+            "day-2026-04-02": 0,
+            "day-2026-04-03": 1,
+        }
+        old_uuids = ["uuid-day2", "uuid-m0", "uuid-m1", "uuid-day3"]
+        final, blanks = compute_page_mapping(old, new, 2, old_uuids)
+        assert len(blanks) == 2
+        assert "uuid-m0" in final
+        assert "uuid-m1" in final
+        assert final[0] == "uuid-day2"
+        # Both orphans inserted after day-2026-04-02, before day-2026-04-03
+        assert final[-1] == "uuid-day3"
+
+    def test_no_old_manifest_produces_all_new_uuids(self):
+        """First sync — no old manifest means all fresh UUIDs."""
+        new = {"day-2026-04-01": 0}
+        final, blanks = compute_page_mapping({}, new, 1, [])
+        assert len(final) == 1
+        assert blanks == []
+
+
+class TestFindInsertionPoint:
+    """Tests for _find_insertion_point bookmark parsing."""
+
+    def test_meeting_inserts_after_day(self):
+        manifest = {"day-2026-04-02": 5, "day-2026-04-03": 6}
+        assert _find_insertion_point("meeting-2026-04-02-0", manifest) == 5
+
+    def test_meeting_inserts_after_last_existing_meeting(self):
+        manifest = {
+            "day-2026-04-02": 5,
+            "meeting-2026-04-02-0": 6,
+            "day-2026-04-03": 7,
+        }
+        # Should insert after the existing meeting-0, not after the day
+        assert _find_insertion_point("meeting-2026-04-02-1", manifest) == 6
+
+    def test_day_inserts_after_previous_day(self):
+        manifest = {"day-2026-04-01": 3, "day-2026-04-03": 5}
+        assert _find_insertion_point("day-2026-04-02", manifest) == 3
+
+    def test_unknown_bookmark_inserts_at_end(self):
+        manifest = {"day-2026-04-01": 0, "day-2026-04-02": 1}
+        assert _find_insertion_point("unknown-bookmark", manifest) == 1
+
+
+class TestBuildContentJson:
+    def test_basic_structure(self):
+        uuids = ["a", "b", "c"]
+        content = build_content_json(uuids)
+        assert content["pageCount"] == 3
+        assert content["pages"] == ["a", "b", "c"]
+        assert content["fileType"] == "pdf"
+
+    def test_preserves_existing_fields(self):
+        existing = {"lastOpenedPage": 5, "margins": 200}
+        content = build_content_json(["a"], existing)
+        assert content["lastOpenedPage"] == 5
+        assert content["margins"] == 200
+        assert content["pageCount"] == 1

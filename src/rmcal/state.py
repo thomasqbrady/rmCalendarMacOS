@@ -86,3 +86,15 @@ def save_meeting_notes_calendar_ids(ids: set[str]) -> None:
     state = load_state()
     state["meeting_notes_calendar_ids"] = sorted(ids)
     save_state(state)
+
+
+def get_page_manifest() -> dict[str, int] | None:
+    """Get the saved page manifest (bookmark→page_index mapping)."""
+    return load_state().get("page_manifest")
+
+
+def save_page_manifest(manifest: dict[str, int]) -> None:
+    """Save the page manifest for annotation preservation across syncs."""
+    state = load_state()
+    state["page_manifest"] = manifest
+    save_state(state)
