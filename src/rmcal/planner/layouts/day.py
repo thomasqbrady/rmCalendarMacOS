@@ -211,7 +211,7 @@ def _render_day_page(
         text_x = ev_x + 2 * mm
         time_str = _format_time(ev.start, config.time_format.value)
         end_str = _format_time(ev.end, config.time_format.value)
-        time_text = f"{time_str} – {end_str}"
+        time_text = _truncate(c, f"{time_str} - {end_str}", available_w, font, SMALL_SIZE)
 
         # Always show the event name — it's the most important element.
         # Layout priority: name > time > location.
@@ -221,6 +221,12 @@ def _render_day_page(
 
         name_text = _sanitize(ev.display_name)
         name_text = _truncate(c, name_text, available_w, font_bold, BODY_SIZE)
+
+        # Clip all text to the event rect so nothing overflows
+        c.saveState()
+        clip = c.beginPath()
+        clip.rect(ev_x, ev_bottom, ev_w_actual, ev_height)
+        c.clipPath(clip, stroke=0)
 
         if line2_y >= ev_bottom + 1 * mm:
             # Enough room for time on line 1, name on line 2
@@ -248,6 +254,8 @@ def _render_day_page(
             c.setFont(font_bold, size)
             c.setFillColorRGB(*BLACK)
             c.drawString(text_x, line1_y, name_text)
+
+        c.restoreState()
 
         # Link to meeting notes page if one exists
         if meeting_events:

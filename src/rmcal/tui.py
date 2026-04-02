@@ -742,9 +742,9 @@ class CalendarSelector(App):
 
     def _on_done_dismissed(self, _result: object) -> None:
         """After Done dialog, offer daemon setup if applicable."""
-        from rmcal.daemon import is_daemon_installed
+        from rmcal.daemon import is_daemon_installed, is_daemon_running
 
-        if self._upload_cloud and not is_daemon_installed():
+        if self._upload_cloud and not (is_daemon_installed() and is_daemon_running()):
             self.push_screen(
                 DaemonSetupScreen(self._document_name),
                 callback=lambda _: self.exit(),
