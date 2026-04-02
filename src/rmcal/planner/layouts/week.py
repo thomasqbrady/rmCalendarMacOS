@@ -25,6 +25,7 @@ from rmcal.planner.styles import (
     MEDIUM,
     PageLayout,
     get_calendar_fill,
+    get_calendar_stripe,
     get_font,
 )
 
@@ -114,7 +115,7 @@ def _render_week_page(
         c.setFillColorRGB(*BLACK)
         ady = banner_top - SMALL_SIZE - 1 * mm
         for ev in all_day_events[:5]:
-            c.drawString(layout.content_x + 2 * mm, ady, ev.display_name)
+            c.drawString(layout.content_x + 2 * mm, ady, _sanitize(ev.display_name))
             ady -= SMALL_SIZE + 1 * mm
 
     # Day columns with time slots
@@ -209,34 +210,33 @@ def _render_week_page(
         c.setFillColorRGB(*get_calendar_fill(ev.calendar_name))
         c.rect(col_x, ev_bottom, ev_w, ev_height, fill=1, stroke=0)
 
-        # Event text
+        # Colored left-border stripe
+        c.setStrokeColorRGB(*get_calendar_stripe(ev.calendar_name))
+        c.setLineWidth(MEDIUM)
+        c.line(col_x, ev_bottom, col_x, ev_top)
+
+        # Event text — always show the name, truncate if needed
         c.setFont(font, TINY_SIZE)
         c.setFillColorRGB(*BLACK)
-        text = ev.display_name
-        if c.stringWidth(text, font, TINY_SIZE) > ev_w - 1 * mm:
-            for i in range(len(text) - 1, 0, -1):
-                truncated = text[:i] + "\u2026"
-                if c.stringWidth(truncated, font, TINY_SIZE) <= ev_w - 1 * mm:
-                    text = truncated
-                    break
-            else:
-                text = "\u2026"
+        text = _sanitize(ev.display_name)
+        available_w = ev_w - 1 * mm
+        text = _truncate(c, text, available_w, font, TINY_SIZE)
         text_y = ev_top - TINY_SIZE - 0.5 * mm
         if text_y >= ev_bottom:
             c.drawString(col_x + 0.5 * mm, text_y, text)
 
-            # Link to meeting notes page if one exists
-            if meeting_events:
-                from rmcal.planner.layouts.meeting_notes import get_day_meetings
-                day_meetings = get_day_meetings(meeting_events, ev_date)
-                if ev in day_meetings:
-                    idx = day_meetings.index(ev)
-                    mn_bm = nav.bm_meeting_note(ev_date, idx)
-                    if nav.get_page(mn_bm) is not None:
-                        c.linkAbsolute(
-                            text, mn_bm,
-                            (col_x, ev_bottom, col_x + ev_w, ev_top),
-                        )
+        # Link to meeting notes page if one exists
+        if meeting_events:
+            from rmcal.planner.layouts.meeting_notes import get_day_meetings
+            day_meetings = get_day_meetings(meeting_events, ev_date)
+            if ev in day_meetings:
+                idx = day_meetings.index(ev)
+                mn_bm = nav.bm_meeting_note(ev_date, idx)
+                if nav.get_page(mn_bm) is not None:
+                    c.linkAbsolute(
+                        text, mn_bm,
+                        (col_x, ev_bottom, col_x + ev_w, ev_top),
+                    )
 
 
 def _compute_tile_columns(events: list[Event]) -> dict[int, tuple[int, int]]:
@@ -320,6 +320,37 @@ def _iter_weeks(config: PlannerConfig):
         if week_end >= dr.start and d <= dr.end:
             yield d
         d += timedelta(days=7)
+
+
+def _sanitize(text: str) -> str:
+    """Replace characters that Helvetica cannot render with safe alternatives."""
+    import unicodedata
+
+    out: list[str] = []
+    for ch in text:
+        try:
+            ch.encode("latin-1")
+            out.append(ch)
+        except UnicodeEncodeError:
+            cat = unicodedata.category(ch)
+            if cat.startswith("P") or cat.startswith("S") or cat.startswith("Z"):
+                out.append(" ")
+            else:
+                decomposed = unicodedata.normalize("NFKD", ch)
+                safe = decomposed.encode("latin-1", "ignore").decode("latin-1")
+                out.append(safe if safe else "")
+    return "".join(out)
+
+
+def _truncate(c: Canvas, text: str, max_w: float, font: str, size: float) -> str:
+    """Truncate text to fit max_w, adding ellipsis if needed."""
+    if c.stringWidth(text, font, size) <= max_w:
+        return text
+    for i in range(len(text) - 1, 0, -1):
+        t = text[:i] + "..."
+        if c.stringWidth(t, font, size) <= max_w:
+            return t
+    return "..."
 
 
 def _get_all_day_events(events: list[Event], days: list[date]) -> list[Event]:

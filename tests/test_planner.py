@@ -17,7 +17,7 @@ from rmcal.planner.layouts.week import (
 from rmcal.planner.layouts.day import (
     _compute_tile_columns as day_tile_columns,
 )
-from rmcal.planner.styles import get_calendar_fill, CALENDAR_FILLS
+from rmcal.planner.styles import get_calendar_fill, get_calendar_stripe, CALENDAR_COLORS
 
 
 def test_page_count_one_month():
@@ -252,17 +252,29 @@ class TestTileColumns:
 # Calendar fill tests
 # ---------------------------------------------------------------------------
 
-class TestCalendarFill:
-    def test_same_name_returns_same_color(self):
+class TestCalendarColors:
+    def test_fill_same_name_returns_same_color(self):
         assert get_calendar_fill("Work") == get_calendar_fill("Work")
+
+    def test_stripe_same_name_returns_same_color(self):
+        assert get_calendar_stripe("Work") == get_calendar_stripe("Work")
 
     def test_different_names_may_differ(self):
         """At least two of three distinct names should produce different fills."""
         fills = {get_calendar_fill(n) for n in ["Work", "Personal", "Holidays"]}
         assert len(fills) >= 2
 
+    def test_fill_and_stripe_are_different(self):
+        """Fill (pastel) should differ from stripe (saturated) for same calendar."""
+        assert get_calendar_fill("Work") != get_calendar_stripe("Work")
+
     def test_returned_values_within_0_1_range(self):
         for name in ["A", "B", "Calendar", "日本語"]:
             r, g, b = get_calendar_fill(name)
             assert 0.0 <= r <= 1.0
-            assert r == g == b  # grayscale
+            assert 0.0 <= g <= 1.0
+            assert 0.0 <= b <= 1.0
+            r, g, b = get_calendar_stripe(name)
+            assert 0.0 <= r <= 1.0
+            assert 0.0 <= g <= 1.0
+            assert 0.0 <= b <= 1.0

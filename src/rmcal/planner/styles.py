@@ -14,23 +14,33 @@ GRAY = (0.35, 0.35, 0.35)            # Secondary text — readable on e-ink
 LIGHT_GRAY = (0.65, 0.65, 0.65)      # Grid lines — visible but not dominant
 VERY_LIGHT_GRAY = (0.85, 0.85, 0.85) # Event backgrounds, subtle fills
 
-# Calendar-specific background fills — well-separated gray levels for e-ink
-CALENDAR_FILLS = [
-    (0.88, 0.88, 0.88),
-    (0.76, 0.76, 0.76),
-    (0.82, 0.82, 0.82),
-    (0.70, 0.70, 0.70),
-    (0.92, 0.92, 0.92),
-    (0.64, 0.64, 0.64),
-    (0.86, 0.86, 0.86),
-    (0.74, 0.74, 0.74),
+# Calendar colors — saturated tints for color e-ink (reMarkable Paper Pro).
+# Background fills are pastel (high lightness) so text remains readable.
+# Left-border stripes are the saturated accent.
+CALENDAR_COLORS = [
+    {"fill": (0.85, 0.92, 1.00), "stripe": (0.20, 0.50, 0.90)},   # blue
+    {"fill": (0.90, 1.00, 0.90), "stripe": (0.20, 0.70, 0.30)},   # green
+    {"fill": (1.00, 0.90, 0.90), "stripe": (0.85, 0.25, 0.25)},   # red
+    {"fill": (0.95, 0.90, 1.00), "stripe": (0.55, 0.30, 0.85)},   # purple
+    {"fill": (1.00, 0.95, 0.85), "stripe": (0.90, 0.60, 0.10)},   # orange
+    {"fill": (0.90, 1.00, 1.00), "stripe": (0.15, 0.65, 0.65)},   # teal
+    {"fill": (1.00, 0.90, 0.95), "stripe": (0.85, 0.30, 0.55)},   # pink
+    {"fill": (1.00, 1.00, 0.88), "stripe": (0.70, 0.65, 0.10)},   # yellow
 ]
 
 
 def get_calendar_fill(calendar_name: str) -> tuple[float, float, float]:
-    """Return a consistent gray fill for a given calendar name."""
-    idx = hash(calendar_name) % len(CALENDAR_FILLS)
-    return CALENDAR_FILLS[idx]
+    """Return a pastel background fill for a given calendar name."""
+    idx = hash(calendar_name) % len(CALENDAR_COLORS)
+    c = CALENDAR_COLORS[idx]["fill"]
+    return (c[0], c[1], c[2])
+
+
+def get_calendar_stripe(calendar_name: str) -> tuple[float, float, float]:
+    """Return a saturated accent stripe color for a given calendar name."""
+    idx = hash(calendar_name) % len(CALENDAR_COLORS)
+    c = CALENDAR_COLORS[idx]["stripe"]
+    return (c[0], c[1], c[2])
 
 
 # Line weights

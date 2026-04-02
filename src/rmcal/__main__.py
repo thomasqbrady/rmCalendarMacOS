@@ -5,7 +5,7 @@ Usage:
     rmcal register           # Register with reMarkable Cloud (one-time)
     rmcal sync               # Headless sync (for daemon/cron)
     rmcal generate           # Generate PDF only
-    rmcal daemon install     # Install 15-min auto-sync daemon
+    rmcal daemon install     # Install 5-min auto-sync daemon
     rmcal daemon uninstall   # Remove the daemon
     rmcal daemon status      # Check daemon status
 """
@@ -222,7 +222,7 @@ def daemon() -> None:
 @daemon.command("install")
 @click.pass_context
 def daemon_install(ctx: click.Context) -> None:
-    """Install launchd daemon for 15-minute auto-sync."""
+    """Install launchd daemon for 5-minute auto-sync."""
     from rmcal.daemon import install_daemon, get_daemon_log_path, PLIST_NAME, PLIST_PATH
 
     install_daemon(document_name=ctx.obj["name"])

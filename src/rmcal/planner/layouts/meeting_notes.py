@@ -60,7 +60,7 @@ def render_meeting_notes_page(
     c.setFont(font_bold, HEADER_SIZE)
     c.setFillColorRGB(*BLACK)
     # Truncate if too long for page width
-    name = event.display_name
+    name = _sanitize(event.display_name)
     max_width = layout.content_right - layout.content_x
     while c.stringWidth(name, font_bold, HEADER_SIZE) > max_width and len(name) > 10:
         name = name[:-4] + "..."
@@ -72,14 +72,14 @@ def render_meeting_notes_page(
         c.setFont(font, SMALL_SIZE)
         c.setFillColorRGB(*GRAY)
         attendee_str = _format_attendees(event.attendees, c, font, SMALL_SIZE, max_width)
-        c.drawString(layout.content_x, y, attendee_str)
+        c.drawString(layout.content_x, y, _sanitize(attendee_str))
 
     # --- Location (tiny gray, if present) ---
     if event.location:
         y -= TINY_SIZE + 2 * mm
         c.setFont(font, TINY_SIZE)
         c.setFillColorRGB(*GRAY)
-        loc = event.location
+        loc = _sanitize(event.location)
         while c.stringWidth(loc, font, TINY_SIZE) > max_width and len(loc) > 10:
             loc = loc[:-4] + "..."
         c.drawString(layout.content_x, y, loc)
@@ -136,6 +136,26 @@ def _format_time_range(event: Event) -> str:
     s = start.strftime("%-I:%M %p")
     e = end.strftime("%-I:%M %p")
     return f"{s} – {e}"
+
+
+def _sanitize(text: str) -> str:
+    """Replace characters that Helvetica cannot render with safe alternatives."""
+    import unicodedata
+
+    out: list[str] = []
+    for ch in text:
+        try:
+            ch.encode("latin-1")
+            out.append(ch)
+        except UnicodeEncodeError:
+            cat = unicodedata.category(ch)
+            if cat.startswith("P") or cat.startswith("S") or cat.startswith("Z"):
+                out.append(" ")
+            else:
+                decomposed = unicodedata.normalize("NFKD", ch)
+                safe = decomposed.encode("latin-1", "ignore").decode("latin-1")
+                out.append(safe if safe else "")
+    return "".join(out)
 
 
 def _format_date(d: date) -> str:

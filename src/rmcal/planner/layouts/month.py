@@ -25,7 +25,7 @@ from rmcal.planner.styles import (
     MEDIUM,
     PageLayout,
     get_font,
-    get_calendar_fill,
+    get_calendar_stripe,
 )
 
 
@@ -167,7 +167,7 @@ def _render_month_page(
             for ev_idx, ev in enumerate(day_events[:max_events]):
                 if event_y < row_bottom + 1 * mm:
                     break
-                c.setFillColorRGB(*get_calendar_fill(ev.calendar_name))
+                c.setFillColorRGB(*get_calendar_stripe(ev.calendar_name))
                 # Truncate event name to fit cell
                 ev_text = _truncate_text(c, ev.display_name, col_w - 4 * mm, font, SMALL_SIZE)
                 c.drawString(cell_x + 2 * mm, event_y, ev_text)
@@ -241,17 +241,38 @@ def _get_month_events(
     return result
 
 
+def _sanitize(text: str) -> str:
+    """Replace characters that Helvetica cannot render with safe alternatives."""
+    import unicodedata
+
+    out: list[str] = []
+    for ch in text:
+        try:
+            ch.encode("latin-1")
+            out.append(ch)
+        except UnicodeEncodeError:
+            cat = unicodedata.category(ch)
+            if cat.startswith("P") or cat.startswith("S") or cat.startswith("Z"):
+                out.append(" ")
+            else:
+                decomposed = unicodedata.normalize("NFKD", ch)
+                safe = decomposed.encode("latin-1", "ignore").decode("latin-1")
+                out.append(safe if safe else "")
+    return "".join(out)
+
+
 def _truncate_text(
     c: Canvas, text: str, max_width: float, font: str, size: float
 ) -> str:
-    """Truncate text to fit within max_width, adding ellipsis if needed."""
+    """Sanitize and truncate text to fit within max_width, adding ellipsis if needed."""
+    text = _sanitize(text)
     if c.stringWidth(text, font, size) <= max_width:
         return text
     for i in range(len(text) - 1, 0, -1):
-        truncated = text[:i] + "…"
+        truncated = text[:i] + "..."
         if c.stringWidth(truncated, font, size) <= max_width:
             return truncated
-    return "…"
+    return "..."
 
 
 def _draw_nav_link(

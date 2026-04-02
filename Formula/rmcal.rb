@@ -48,7 +48,7 @@ class Rmcal < Formula
 
       You'll be guided through setup on first launch.
 
-      To enable auto-sync (every 15 min):
+      To enable auto-sync (every 5 min):
         rmcal daemon install
     EOS
   end
