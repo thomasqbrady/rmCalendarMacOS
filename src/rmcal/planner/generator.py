@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import date, timedelta
 from pathlib import Path
 
 from reportlab.pdfgen.canvas import Canvas
@@ -12,15 +13,27 @@ from rmcal.planner.layouts import day, month, week, year
 from rmcal.planner.navigation import NavigationRegistry
 from rmcal.planner.styles import PageLayout, get_page_size, register_cjk_fonts
 
+# Only generate meeting notes pages for events within this many days from today
+MEETING_NOTES_HORIZON_DAYS = 14
+
 
 def _filter_meeting_events(
     events: list[Event],
     meeting_notes_calendar_ids: set[str],
 ) -> list[Event]:
-    """Filter events to only non-all-day events from meeting notes calendars."""
+    """Filter events to only non-all-day events from meeting notes calendars.
+
+    Only includes events within MEETING_NOTES_HORIZON_DAYS (2 weeks) from today
+    to keep the planner size manageable — older and far-future meetings don't
+    need dedicated notes pages.
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=MEETING_NOTES_HORIZON_DAYS)
     return [
         e for e in events
-        if not e.all_day and e.calendar_id in meeting_notes_calendar_ids
+        if not e.all_day
+        and e.calendar_id in meeting_notes_calendar_ids
+        and e.start.date() <= cutoff
     ]
 
 

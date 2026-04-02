@@ -1,7 +1,9 @@
 """reMarkable Cloud API client (tectonic / sync v3-v4 protocol).
 
-Based on reverse-engineering from rmapi-js (erikbrinkman/rmapi-js).
+Based on reverse-engineering from rmapi-js (erikbrinkman/rmapi-js)
+and ddvk/rmapi (v3→v4 schema migration).
 Handles device registration, authentication, document listing, upload, and replacement.
+Supports both schema v3 and v4 index formats transparently.
 """
 
 from __future__ import annotations
@@ -24,9 +26,8 @@ UPLOAD_HOST = "https://internal.cloud.remarkable.com"
 TOKEN_FILE = Path("~/.config/rmcal/remarkable_token.json").expanduser()
 
 # Index format constants
-SCHEMA_VERSION = 3
-DOC_TYPE = 80000000
-FILE_TYPE = 0
+DOC_TYPE = 80000000  # v3 uses this for document entries in root index
+FILE_TYPE = 0        # v4 uses this for all entries; v3 uses for file entries
 DELIMITER = ":"
 
 
@@ -72,9 +73,14 @@ class RawEntry:
     @staticmethod
     def parse(line: str) -> RawEntry:
         parts = line.strip().split(":")
+        # v4 summary lines have "." as the entry_type field — keep as 0
+        try:
+            entry_type = int(parts[1])
+        except ValueError:
+            entry_type = 0
         return RawEntry(
             hash=parts[0],
-            entry_type=int(parts[1]),
+            entry_type=entry_type,
             entry_id=parts[2],
             subfiles=int(parts[3]) if len(parts) > 3 else 0,
             size=int(parts[4]) if len(parts) > 4 else 0,
@@ -106,8 +112,61 @@ def _hash_entries_v3(entries: list[RawEntry]) -> str:
     return hasher.hexdigest()
 
 
+def _hash_blob_v4(blob: bytes) -> str:
+    """Compute schema v4 hash: SHA-256 of the entire serialized index blob."""
+    return _sha256(blob)
+
+
+def _build_entries_blob(entries: list[RawEntry], schema: int) -> bytes:
+    """Build an index blob from entries for the given schema version.
+
+    v3 format:
+        3
+        hash:type:id:subfiles:size
+        ...
+
+    v4 format:
+        4
+        0:.:count:totalSize
+        hash:type:id:subfiles:size
+        ...
+    """
+    sorted_entries = sorted(entries, key=lambda e: e.entry_id)
+    lines = [f"{schema}\n"]
+
+    if schema >= 4:
+        # v4 summary header: 0:.:entryCount:totalSize
+        total_size = sum(e.size for e in sorted_entries)
+        lines.append(f"0:.:{len(sorted_entries)}:{total_size}\n")
+
+    for e in sorted_entries:
+        lines.append(f"{e.line()}\n")
+
+    return "".join(lines).encode()
+
+
+def _root_entry_type(schema: int) -> int:
+    """Return the entry_type to use for documents in the root index.
+
+    v3 uses DOC_TYPE (80000000), v4 uses FILE_TYPE (0).
+    """
+    return FILE_TYPE if schema >= 4 else DOC_TYPE
+
+
+def _is_doc_entry(entry: RawEntry) -> bool:
+    """Check if a root index entry represents a document (works for v3 and v4).
+
+    v3 uses DOC_TYPE (80000000), v4 uses FILE_TYPE (0) for documents.
+    Summary lines are already filtered out during parsing.
+    """
+    return entry.entry_type in (DOC_TYPE, FILE_TYPE)
+
+
 class RemarkableCloud:
-    """Client for the reMarkable Cloud API (tectonic protocol)."""
+    """Client for the reMarkable Cloud API (tectonic protocol).
+
+    Automatically detects and operates in the user's schema version (v3 or v4).
+    """
 
     def __init__(self) -> None:
         self._device_token: str | None = None
@@ -184,13 +243,21 @@ class RemarkableCloud:
         resp.raise_for_status()
         return resp.content
 
-    def _put_blob(self, blob_hash: str, data: bytes, filename: str = "") -> None:
-        """Upload a blob by hash."""
+    def _put_blob(
+        self, blob_hash: str, data: bytes, filename: str = "",
+        schema: int = 3,
+    ) -> None:
+        """Upload a blob by hash.
+
+        For v4 schema blobs (.docSchema), sets Content-Type to text/plain.
+        """
         crc = _crc32c(data)
-        headers = {
+        headers: dict[str, str] = {
             "rm-filename": filename or blob_hash,
             "x-goog-hash": f"crc32c={crc}",
         }
+        if schema >= 4 and filename.endswith(".docSchema"):
+            headers["content-type"] = "text/plain; charset=UTF-8"
         resp = self._authed_request(
             "PUT", f"{RAW_HOST}/sync/v3/files/{blob_hash}",
             content=data, headers=headers,
@@ -216,27 +283,40 @@ class RemarkableCloud:
     # --- Index parsing ---
 
     def _parse_entries(self, blob: bytes) -> list[RawEntry]:
-        """Parse an index blob into entries."""
+        """Parse an index blob into entries (works for both v3 and v4)."""
         text = blob.decode()
         lines = text.strip().split("\n")
-        # Skip schema version line (and optional info line for v4)
+        # Skip schema version line (first line)
         entries = []
         for line in lines[1:]:
             line = line.strip()
-            if line:
-                parsed = RawEntry.parse(line)
-                # Skip v4 info lines (type "0" with id "." at start)
-                if parsed.entry_id != ".":
-                    entries.append(parsed)
+            if not line:
+                continue
+            # v4 summary lines look like "0:.:count:totalSize" —
+            # detect by checking if the second field (type) is "."
+            parts = line.split(":", 3)
+            if len(parts) >= 2 and parts[1] == ".":
+                continue  # Skip v4 summary/info line
+            entries.append(RawEntry.parse(line))
         return entries
 
-    def _build_entries_blob(self, entries: list[RawEntry]) -> bytes:
-        """Build an index blob from entries (schema v3)."""
-        sorted_entries = sorted(entries, key=lambda e: e.entry_id)
-        lines = [f"{SCHEMA_VERSION}\n"]
-        for e in sorted_entries:
-            lines.append(f"{e.line()}\n")
-        return "".join(lines).encode()
+    def _detect_schema_from_blob(self, blob: bytes) -> int:
+        """Detect the schema version from the first line of an index blob."""
+        first_line = blob.split(b"\n", 1)[0].strip()
+        try:
+            return int(first_line)
+        except ValueError:
+            return 3
+
+    def _hash_index(self, entries: list[RawEntry], blob: bytes, schema: int) -> str:
+        """Compute the index hash using the appropriate algorithm for the schema.
+
+        v3: SHA-256 of concatenated binary entry hashes (hash-of-hashes).
+        v4: SHA-256 of the entire serialized index blob (content hash).
+        """
+        if schema >= 4:
+            return _hash_blob_v4(blob)
+        return _hash_entries_v3(entries)
 
     # --- Public API ---
 
@@ -277,7 +357,7 @@ class RemarkableCloud:
 
         docs = []
         for entry in root_entries:
-            if entry.entry_type != DOC_TYPE:
+            if not _is_doc_entry(entry):
                 continue
             try:
                 doc_blob = self._get_blob(entry.hash)
@@ -360,11 +440,11 @@ class RemarkableCloud:
                     raise
 
     def _do_update(self, doc: CloudDocument, pdf_path: Path) -> None:
-        """Perform the actual document update."""
+        """Perform the actual document update (supports v3 and v4 schemas)."""
         doc_id = doc.doc_id
         pdf_data = pdf_path.read_bytes()
 
-        # Get current root state
+        # Get current root state — schema_version tells us which format to use
         root_hash, generation, schema_version = self._get_root_hash()
         root_blob = self._get_blob(root_hash)
         root_entries = self._parse_entries(root_blob)
@@ -410,21 +490,31 @@ class RemarkableCloud:
                 new_file_entries.append(f)
 
         # Build and upload new document index
-        doc_index_blob = self._build_entries_blob(new_file_entries)
-        doc_index_hash = _hash_entries_v3(new_file_entries)
-        self._put_blob(doc_index_hash, doc_index_blob, f"{doc_id}.docSchema")
+        doc_index_blob = _build_entries_blob(new_file_entries, schema_version)
+        doc_index_hash = self._hash_index(
+            new_file_entries, doc_index_blob, schema_version,
+        )
+        self._put_blob(
+            doc_index_hash, doc_index_blob, f"{doc_id}.docSchema",
+            schema=schema_version,
+        )
 
         # Update root index
+        doc_entry_type = _root_entry_type(schema_version)
         new_root_entries = [e for e in root_entries if e.entry_id != doc_id]
         new_root_entries.append(RawEntry(
-            hash=doc_index_hash, entry_type=DOC_TYPE,
+            hash=doc_index_hash, entry_type=doc_entry_type,
             entry_id=doc_id, subfiles=len(new_file_entries),
         ))
 
-        root_index_blob = self._build_entries_blob(new_root_entries)
-        # For schema v3, root hash is also computed from concatenated binary hashes
-        new_root_hash = _hash_entries_v3(new_root_entries)
-        self._put_blob(new_root_hash, root_index_blob, "root.docSchema")
+        root_index_blob = _build_entries_blob(new_root_entries, schema_version)
+        new_root_hash = self._hash_index(
+            new_root_entries, root_index_blob, schema_version,
+        )
+        self._put_blob(
+            new_root_hash, root_index_blob, "root.docSchema",
+            schema=schema_version,
+        )
 
         # Commit the new root
         self._put_root_hash(new_root_hash, generation)
