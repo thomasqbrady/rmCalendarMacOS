@@ -72,6 +72,8 @@ You can also manage the daemon from the TUI by pressing `d` on the calendar sele
 | `rmcal sync` | Headless sync (used by the daemon) |
 | `rmcal generate` | Generate PDF without uploading |
 | `rmcal register` | Register with reMarkable Cloud |
+| `rmcal logs` | Show daemon log output |
+| `rmcal logs --watch` | Follow daemon logs in real time |
 | `rmcal daemon install` | Enable 5-minute auto-sync |
 | `rmcal daemon uninstall` | Disable auto-sync |
 | `rmcal daemon status` | Check daemon status |

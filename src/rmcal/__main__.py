@@ -5,6 +5,8 @@ Usage:
     rmcal register           # Register with reMarkable Cloud (one-time)
     rmcal sync               # Headless sync (for daemon/cron)
     rmcal generate           # Generate PDF only
+    rmcal logs               # Show daemon logs
+    rmcal logs --watch       # Follow daemon logs in real time
     rmcal daemon install     # Install 5-min auto-sync daemon
     rmcal daemon uninstall   # Remove the daemon
     rmcal daemon status      # Check daemon status
@@ -12,11 +14,18 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import click
+
+
+def _log(msg: str) -> None:
+    """Print a timestamped log line (used by sync for daemon log readability)."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    click.echo(f"[{ts}] {msg}")
 
 CONFIG_DIR = Path("~/.config/rmcal").expanduser()
 DEFAULT_OUTPUT = CONFIG_DIR / "planner.pdf"
@@ -123,11 +132,11 @@ def sync(ctx: click.Context) -> None:
         end = date(year, month, 1) - timedelta(days=1)
 
     dr = DateRange(start=start, end=end)
-    click.echo(f"[rmcal] Date range: {dr.start} -> {dr.end}")
+    _log(f"Date range: {dr.start} -> {dr.end}")
 
     # Fetch events
     events = fetch_macos_events(dr, calendar_ids=calendar_ids)
-    click.echo(f"[rmcal] Found {len(events)} events")
+    _log(f"Found {len(events)} events")
 
     # Generate PDF
     output = ctx.obj["output"]
@@ -138,7 +147,7 @@ def sync(ctx: click.Context) -> None:
         config, events, output_path=output,
         meeting_notes_calendar_ids=meeting_notes_ids,
     )
-    click.echo(f"[rmcal] Generated {pdf_path} ({pdf_path.stat().st_size / 1024:.0f} KB)")
+    _log(f"Generated {pdf_path} ({pdf_path.stat().st_size / 1024:.0f} KB)")
 
     # Upload to cloud
     if ctx.obj["upload"]:
@@ -147,7 +156,7 @@ def sync(ctx: click.Context) -> None:
 
         with RemarkableCloud() as cloud:
             if not cloud.is_authenticated:
-                click.echo("[rmcal] ERROR: Not authenticated. Run 'rmcal register' first.")
+                _log("ERROR: Not authenticated. Run 'rmcal register' first.")
                 sys.exit(1)
 
             document_name = ctx.obj["name"]
@@ -155,22 +164,22 @@ def sync(ctx: click.Context) -> None:
             if saved_id:
                 existing = cloud.find_document_by_id(saved_id)
                 if existing:
-                    click.echo("[rmcal] Updating existing document...")
+                    _log("Updating existing document...")
                     cloud.update_document(existing, pdf_path)
-                    click.echo("[rmcal] Updated successfully")
+                    _log("Updated successfully")
                 else:
-                    click.echo("[rmcal] Previous doc not found, uploading new...")
+                    _log("Previous doc not found, uploading new...")
                     clear_cloud_doc_id()
                     doc_id = cloud.upload_new_document(document_name, pdf_path)
                     save_cloud_doc_id(doc_id)
-                    click.echo(f"[rmcal] Uploaded as {doc_id}")
+                    _log(f"Uploaded as {doc_id}")
             else:
-                click.echo(f"[rmcal] Uploading new document '{document_name}'...")
+                _log(f"Uploading new document '{document_name}'...")
                 doc_id = cloud.upload_new_document(document_name, pdf_path)
                 save_cloud_doc_id(doc_id)
-                click.echo(f"[rmcal] Uploaded as {doc_id}")
+                _log(f"Uploaded as {doc_id}")
 
-    click.echo("[rmcal] Done!")
+    _log("Done!")
 
 
 @cli.command()
@@ -267,6 +276,24 @@ def daemon_status() -> None:
         click.echo("Auto-sync daemon: installed but not running")
 
     click.echo(f"Log: {get_daemon_log_path()}")
+
+
+@cli.command()
+@click.option("--watch", "-w", is_flag=True, help="Follow the log in real time (tail -f)")
+def logs(watch: bool) -> None:
+    """Show daemon log output."""
+    from rmcal.daemon import get_daemon_log_path
+
+    log_path = get_daemon_log_path()
+    if not log_path.exists():
+        click.echo(f"No log file found at {log_path}")
+        click.echo("Has the daemon run at least once? Try: rmcal daemon install")
+        return
+
+    if watch:
+        os.execvp("tail", ["tail", "-f", str(log_path)])
+    else:
+        click.echo(log_path.read_text(), nl=False)
 
 
 if __name__ == "__main__":
