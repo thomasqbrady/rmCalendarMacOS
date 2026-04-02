@@ -62,7 +62,7 @@ rmcal daemon uninstall   # Stop and remove the daemon
 
 You can also manage the daemon from the TUI by pressing `d` on the calendar selection screen.
 
-> **Upgrading from v0.1.18 or earlier?** The daemon plist previously used a versioned path that broke after `brew reinstall`. Run `rmcal daemon uninstall && rmcal daemon install` once to fix it. From v0.1.19 onward this is handled automatically.
+> **Upgrading from before v0.1.21?** The daemon plist previously used a versioned path that broke after `brew reinstall`. Run `rmcal daemon uninstall && rmcal daemon install` once to fix it. From v0.1.21 onward this is handled automatically.
 
 ## Commands
 

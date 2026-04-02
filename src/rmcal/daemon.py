@@ -118,6 +118,33 @@ def uninstall_daemon() -> None:
         PLIST_PATH.unlink()
 
 
+def maybe_fix_stale_plist() -> None:
+    """If the daemon plist has a versioned Cellar path, rewrite it with the stable path.
+
+    Called at the start of ``rmcal sync`` so the fix happens as the real user
+    (not in Homebrew's sandbox where ~/Library writes are blocked).
+    """
+    if not PLIST_PATH.exists():
+        return
+
+    content = PLIST_PATH.read_text()
+    if "Cellar" not in content:
+        return  # already stable
+
+    # Extract the --name value
+    import re
+    strings = re.findall(r"<string>([^<]+)</string>", content)
+    try:
+        idx = strings.index("--name")
+        doc_name = strings[idx + 1]
+    except (ValueError, IndexError):
+        doc_name = "rmCalendar"
+
+    # Rewrite with stable paths
+    uninstall_daemon()
+    install_daemon(document_name=doc_name)
+
+
 def get_daemon_log_path() -> Path:
     """Return the path to the daemon log file."""
     return LOG_PATH

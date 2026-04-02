@@ -88,9 +88,14 @@ def register() -> None:
 def sync(ctx: click.Context) -> None:
     """Headless sync using saved calendar selection (for daemon/cron)."""
     from rmcal.calendar.macos import fetch_macos_events, is_available
+    from rmcal.daemon import maybe_fix_stale_plist
     from rmcal.models import DateRange, PlannerConfig
     from rmcal.planner.generator import generate_planner
     from rmcal.state import get_meeting_notes_calendar_ids, get_selected_calendar_ids
+
+    # Self-heal: if the daemon plist has a stale versioned Cellar path,
+    # rewrite it now (runs as the real user, not Homebrew's sandbox).
+    maybe_fix_stale_plist()
 
     if not is_available():
         click.echo("ERROR: macOS EventKit not available.")

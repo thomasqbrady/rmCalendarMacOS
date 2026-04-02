@@ -26,19 +26,21 @@ class Rmcal < Formula
   end
 
   def post_install
-    # If the daemon is already installed, regenerate the plist so it points
-    # to the stable symlink path instead of the old versioned Cellar path.
     plist = Pathname.new("#{Dir.home}/Library/LaunchAgents/com.rmcal.daemon.plist")
     return unless plist.exist?
 
-    # Extract the --name value from the existing plist
-    content = plist.read
-    args = content.scan(%r{<string>([^<]+)</string>}).flatten
-    name_idx = args.index("--name")
-    doc_name = (name_idx && args[name_idx + 1]) || "rmCalendar"
+    # Fix stale versioned Cellar paths in-place (sed works even when full
+    # file writes are blocked by Homebrew's sandbox).
+    stable_bin = "#{HOMEBREW_PREFIX}/bin/rmcal"
+    stable_path_dir = "#{HOMEBREW_PREFIX}/bin"
+    quiet_system "sed", "-i", "",
+      "-e", "s|/opt/homebrew/Cellar/rmcal/[^/]*/libexec/bin/rmcal|#{stable_bin}|g",
+      "-e", "s|/opt/homebrew/Cellar/rmcal/[^/]*/libexec/bin|#{stable_path_dir}|g",
+      plist.to_s
 
-    system "launchctl", "unload", plist
-    system bin/"rmcal", "--name", doc_name, "daemon", "install"
+    # Reload so launchd picks up any path changes and the new code
+    quiet_system "launchctl", "unload", plist
+    quiet_system "launchctl", "load", plist
   end
 
   def caveats
