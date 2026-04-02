@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rmCalendarMacOS"
-version = "0.1.26"
+version = "0.1.27"
 description = "Sync macOS Calendar to reMarkable tablets as interactive PDF planners"
 readme = "README.md"
 requires-python = ">=3.11"
