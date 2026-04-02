@@ -3,8 +3,8 @@ class Rmcal < Formula
 
   desc "Sync macOS Calendar to reMarkable tablets as interactive PDF planners"
   homepage "https://github.com/thomasqbrady/rmCalendarMacOS"
-  url "https://github.com/thomasqbrady/rmCalendarMacOS/archive/refs/tags/v0.1.19.tar.gz"
-  sha256 "f2fe0a81db8bc24d4359dd57cc636db3d071eca17ce80985f2a1ab3cd15bc4e5"
+  url "https://github.com/thomasqbrady/rmCalendarMacOS/archive/refs/tags/v0.1.20.tar.gz"
+  sha256 "282adb803f583e7c68ebbf57d69128b50dbec13e700d54178a483f1831052187"
   license "MIT"
   head "https://github.com/thomasqbrady/rmCalendarMacOS.git", branch: "main"
 
