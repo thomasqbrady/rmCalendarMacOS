@@ -29,21 +29,19 @@ class Rmcal < Formula
     plist = Pathname.new("#{Dir.home}/Library/LaunchAgents/com.rmcal.daemon.plist")
     return unless plist.exist?
 
-    content = plist.read
-    return unless content.include?("Cellar")
+    # Fix stale versioned Cellar paths if present
+    if plist.read.include?("Cellar")
+      stable_bin = "#{HOMEBREW_PREFIX}/bin/rmcal"
+      stable_path_dir = "#{HOMEBREW_PREFIX}/bin"
+      quiet_system "sed", "-i", "",
+        "-e", "s|/opt/homebrew/Cellar/rmcal/[^/]*/libexec/bin/rmcal|#{stable_bin}|g",
+        "-e", "s|/opt/homebrew/Cellar/rmcal/[^/]*/libexec/bin|#{stable_path_dir}|g",
+        plist.to_s
+    end
 
-    # Fix stale versioned Cellar paths in-place. Only runs when the plist
-    # still has a hardcoded Cellar path — otherwise the stable symlink at
-    # /opt/homebrew/bin/rmcal already points to the new version and
-    # launchd will pick it up on the next scheduled run automatically.
-    stable_bin = "#{HOMEBREW_PREFIX}/bin/rmcal"
-    stable_path_dir = "#{HOMEBREW_PREFIX}/bin"
-    quiet_system "sed", "-i", "",
-      "-e", "s|/opt/homebrew/Cellar/rmcal/[^/]*/libexec/bin/rmcal|#{stable_bin}|g",
-      "-e", "s|/opt/homebrew/Cellar/rmcal/[^/]*/libexec/bin|#{stable_path_dir}|g",
-      plist.to_s
-
-    # Reload so launchd picks up the rewritten paths
+    # Restart the daemon. During `brew reinstall`, Homebrew replaces the Cellar
+    # directory which invalidates code signatures of running processes, causing
+    # SIGKILL. Unload first (may already be dead), then reload with new binaries.
     quiet_system "launchctl", "unload", plist
     quiet_system "launchctl", "load", plist
   end

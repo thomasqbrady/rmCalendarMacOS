@@ -93,6 +93,8 @@ def install_daemon(document_name: str = "rmCalendar") -> None:
     <integer>300</integer>
     <key>RunAtLoad</key>
     <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
     <key>StandardOutPath</key>
     <string>{LOG_PATH}</string>
     <key>StandardErrorPath</key>
