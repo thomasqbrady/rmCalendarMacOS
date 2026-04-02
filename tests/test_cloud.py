@@ -548,7 +548,7 @@ class TestUpdateRetry:
         cloud = _make_cloud()
         call_count = 0
 
-        def mock_do_update(doc, pdf_path):
+        def mock_do_update(doc, pdf_path, old_manifest=None, new_manifest=None):
             nonlocal call_count
             call_count += 1
             if call_count < 3:
