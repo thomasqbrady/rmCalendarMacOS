@@ -7,12 +7,31 @@ from reportlab.lib.units import mm
 
 from rmcal.models import Device, Language, PageSize
 
-# Colors — e-ink optimized (no color, high contrast)
+# Colors — e-ink optimized (no color, high contrast for gray-scale displays)
 BLACK = (0, 0, 0)
 WHITE = (1, 1, 1)
-GRAY = (0.53, 0.53, 0.53)
-LIGHT_GRAY = (0.85, 0.85, 0.85)
-VERY_LIGHT_GRAY = (0.93, 0.93, 0.93)
+GRAY = (0.35, 0.35, 0.35)            # Secondary text — readable on e-ink
+LIGHT_GRAY = (0.65, 0.65, 0.65)      # Grid lines — visible but not dominant
+VERY_LIGHT_GRAY = (0.85, 0.85, 0.85) # Event backgrounds, subtle fills
+
+# Calendar-specific background fills — well-separated gray levels for e-ink
+CALENDAR_FILLS = [
+    (0.88, 0.88, 0.88),
+    (0.76, 0.76, 0.76),
+    (0.82, 0.82, 0.82),
+    (0.70, 0.70, 0.70),
+    (0.92, 0.92, 0.92),
+    (0.64, 0.64, 0.64),
+    (0.86, 0.86, 0.86),
+    (0.74, 0.74, 0.74),
+]
+
+
+def get_calendar_fill(calendar_name: str) -> tuple[float, float, float]:
+    """Return a consistent gray fill for a given calendar name."""
+    idx = hash(calendar_name) % len(CALENDAR_FILLS)
+    return CALENDAR_FILLS[idx]
+
 
 # Line weights
 HAIRLINE = 0.25

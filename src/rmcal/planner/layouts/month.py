@@ -25,6 +25,7 @@ from rmcal.planner.styles import (
     MEDIUM,
     PageLayout,
     get_font,
+    get_calendar_fill,
 )
 
 
@@ -97,7 +98,7 @@ def _render_month_page(
 
     # Navigation: back to year
     year_bm = nav.bm_year(year)
-    _draw_nav_link(c, layout, nav, year_bm, str(year), title_y, font, SMALL_SIZE)
+    _draw_nav_link(c, layout, nav, year_bm, str(year), title_y, font, BODY_SIZE)
 
     # Prev/Next month arrows
     _draw_month_arrows(c, nav, config, layout, year, month, title_y, font_bold)
@@ -166,7 +167,7 @@ def _render_month_page(
             for ev_idx, ev in enumerate(day_events[:max_events]):
                 if event_y < row_bottom + 1 * mm:
                     break
-                c.setFillColorRGB(*GRAY)
+                c.setFillColorRGB(*get_calendar_fill(ev.calendar_name))
                 # Truncate event name to fit cell
                 ev_text = _truncate_text(c, ev.display_name, col_w - 4 * mm, font, SMALL_SIZE)
                 c.drawString(cell_x + 2 * mm, event_y, ev_text)
@@ -200,7 +201,7 @@ def _render_month_page(
             week_bm = nav.bm_week(year, iso_week)
             wk_label = f"W{iso_week}"
             wk_y = row_top - row_h / 2
-            c.setFont(font, TINY_SIZE)
+            c.setFont(font, SMALL_SIZE)
             c.setFillColorRGB(*GRAY)
 
             if config.handedness.value == "right":
@@ -210,10 +211,10 @@ def _render_month_page(
 
             c.drawString(wk_x, wk_y, wk_label)
             if nav.get_page(week_bm) is not None:
-                tw = c.stringWidth(wk_label, font, TINY_SIZE)
+                tw = c.stringWidth(wk_label, font, SMALL_SIZE)
                 c.linkAbsolute(
                     wk_label, week_bm,
-                    (wk_x - 1, wk_y - 1, wk_x + tw + 1, wk_y + TINY_SIZE + 1),
+                    (wk_x - 1, wk_y - 1, wk_x + tw + 1, wk_y + SMALL_SIZE + 1),
                 )
 
     # Vertical grid lines
@@ -294,13 +295,13 @@ def _draw_month_arrows(
         prev_year -= 1
     prev_bm = nav.bm_month(prev_year, prev_month)
     if nav.get_page(prev_bm) is not None:
-        c.setFont(font_bold, BODY_SIZE)
+        c.setFont(font_bold, HEADER_SIZE)
         c.setFillColorRGB(*GRAY)
         arrow = "<"
-        x = layout.content_right - 30 * mm
+        x = layout.content_right - 35 * mm
         c.drawString(x, y, arrow)
-        tw = c.stringWidth(arrow, font_bold, BODY_SIZE)
-        c.linkAbsolute(arrow, prev_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
+        tw = c.stringWidth(arrow, font_bold, HEADER_SIZE)
+        c.linkAbsolute(arrow, prev_bm, (x - 1, y - 1, x + tw + 1, y + HEADER_SIZE + 1))
 
     # Next month
     next_month = month + 1
@@ -310,10 +311,10 @@ def _draw_month_arrows(
         next_year += 1
     next_bm = nav.bm_month(next_year, next_month)
     if nav.get_page(next_bm) is not None:
-        c.setFont(font_bold, BODY_SIZE)
+        c.setFont(font_bold, HEADER_SIZE)
         c.setFillColorRGB(*GRAY)
         arrow = ">"
-        x = layout.content_right - 20 * mm
+        x = layout.content_right - 22 * mm
         c.drawString(x, y, arrow)
-        tw = c.stringWidth(arrow, font_bold, BODY_SIZE)
-        c.linkAbsolute(arrow, next_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
+        tw = c.stringWidth(arrow, font_bold, HEADER_SIZE)
+        c.linkAbsolute(arrow, next_bm, (x - 1, y - 1, x + tw + 1, y + HEADER_SIZE + 1))

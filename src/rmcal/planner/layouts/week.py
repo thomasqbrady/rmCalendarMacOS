@@ -24,6 +24,7 @@ from rmcal.planner.styles import (
     HAIRLINE,
     MEDIUM,
     PageLayout,
+    get_calendar_fill,
     get_font,
 )
 
@@ -87,13 +88,13 @@ def _render_week_page(
     # Nav: back to month
     month_bm = nav.bm_month(week_start.year, week_start.month)
     if nav.get_page(month_bm) is not None:
-        c.setFont(font, SMALL_SIZE)
+        c.setFont(font, BODY_SIZE)
         c.setFillColorRGB(*GRAY)
         nav_text = month_label
-        nav_x = layout.content_right - c.stringWidth(nav_text, font, SMALL_SIZE)
+        nav_x = layout.content_right - c.stringWidth(nav_text, font, BODY_SIZE)
         c.drawString(nav_x, title_y, nav_text)
-        tw = c.stringWidth(nav_text, font, SMALL_SIZE)
-        c.linkAbsolute(nav_text, month_bm, (nav_x - 1, title_y - 1, nav_x + tw + 1, title_y + SMALL_SIZE + 1))
+        tw = c.stringWidth(nav_text, font, BODY_SIZE)
+        c.linkAbsolute(nav_text, month_bm, (nav_x - 1, title_y - 1, nav_x + tw + 1, title_y + BODY_SIZE + 1))
 
     # Week prev/next arrows
     _draw_week_arrows(c, nav, config, layout, week_start, title_y, font_bold)
@@ -118,7 +119,7 @@ def _render_week_page(
 
     # Day columns with time slots
     col_w = layout.content_width / 7
-    grid_top = banner_bottom - 6 * mm
+    grid_top = banner_bottom - 8 * mm
     grid_bottom = layout.content_bottom
 
     hours = list(range(config.day_start_hour, config.day_end_hour + 1))
@@ -166,14 +167,29 @@ def _render_week_page(
 
     # Place timed events
     timed_events = _get_timed_events(events, days)
+
+    # Group timed events by day and compute tile columns for overlapping events
+    day_events: dict[int, list[Event]] = {}
+    for ev in timed_events:
+        ev_date = ev.start.date() if isinstance(ev.start, datetime) else ev.start
+        di = (ev_date - week_start).days
+        if 0 <= di < 7:
+            day_events.setdefault(di, []).append(ev)
+
+    tiles: dict[int, tuple[int, int]] = {}
+    for di, devs in day_events.items():
+        tiles.update(_compute_tile_columns(devs))
+
     for ev in timed_events:
         ev_date = ev.start.date() if isinstance(ev.start, datetime) else ev.start
         day_idx = (ev_date - week_start).days
         if not 0 <= day_idx < 7:
             continue
 
-        col_x = layout.content_x + day_idx * col_w + 1 * mm
-        ev_w = col_w - 2 * mm
+        tile_col, tile_total = tiles.get(id(ev), (0, 1))
+        tile_w = (col_w - 2 * mm) / tile_total
+        col_x = layout.content_x + day_idx * col_w + 1 * mm + tile_col * tile_w
+        ev_w = tile_w - 0.5 * mm
 
         # Calculate vertical position from time
         start_hour = ev.start.hour + ev.start.minute / 60.0
@@ -190,16 +206,21 @@ def _render_week_page(
             continue
 
         # Event background
-        c.setFillColorRGB(*VERY_LIGHT_GRAY)
+        c.setFillColorRGB(*get_calendar_fill(ev.calendar_name))
         c.rect(col_x, ev_bottom, ev_w, ev_height, fill=1, stroke=0)
 
         # Event text
         c.setFont(font, TINY_SIZE)
         c.setFillColorRGB(*BLACK)
         text = ev.display_name
-        max_chars = int(ev_w / (TINY_SIZE * 0.5))
-        if len(text) > max_chars:
-            text = text[: max_chars - 1] + "…"
+        if c.stringWidth(text, font, TINY_SIZE) > ev_w - 1 * mm:
+            for i in range(len(text) - 1, 0, -1):
+                truncated = text[:i] + "\u2026"
+                if c.stringWidth(truncated, font, TINY_SIZE) <= ev_w - 1 * mm:
+                    text = truncated
+                    break
+            else:
+                text = "\u2026"
         text_y = ev_top - TINY_SIZE - 0.5 * mm
         if text_y >= ev_bottom:
             c.drawString(col_x + 0.5 * mm, text_y, text)
@@ -216,6 +237,71 @@ def _render_week_page(
                             text, mn_bm,
                             (col_x, ev_bottom, col_x + ev_w, ev_top),
                         )
+
+
+def _compute_tile_columns(events: list[Event]) -> dict[int, tuple[int, int]]:
+    """Assign column index and total columns to overlapping timed events.
+
+    Returns a dict mapping ``id(event)`` to ``(col_index, total_cols)``
+    for every event in *events*.  Events that transitively overlap form
+    a group and share the same *total_cols* value (the maximum number of
+    concurrent columns needed within that group).
+    """
+    if not events:
+        return {}
+
+    sorted_evs = sorted(events, key=lambda e: e.start)
+
+    # columns[i] is a list of events assigned to column i
+    columns: list[list[Event]] = []
+    col_map: dict[int, int] = {}  # id(ev) -> col_index
+
+    for ev in sorted_evs:
+        placed = False
+        for ci, col_events in enumerate(columns):
+            # Check if ev overlaps with any event already in this column
+            if all(ev.start >= existing.end for existing in col_events if existing.end):
+                col_events.append(ev)
+                col_map[id(ev)] = ci
+                placed = True
+                break
+        if not placed:
+            columns.append([ev])
+            col_map[id(ev)] = len(columns) - 1
+
+    # Build groups of transitively overlapping events
+    def _overlaps(a: Event, b: Event) -> bool:
+        a_end = a.end or a.start
+        b_end = b.end or b.start
+        return a.start < b_end and b.start < a_end
+
+    visited: set[int] = set()
+    groups: list[list[Event]] = []
+
+    for ev in sorted_evs:
+        if id(ev) in visited:
+            continue
+        # BFS to find the full transitive group
+        group = [ev]
+        visited.add(id(ev))
+        queue = [ev]
+        while queue:
+            cur = queue.pop()
+            for other in sorted_evs:
+                if id(other) not in visited and _overlaps(cur, other):
+                    visited.add(id(other))
+                    group.append(other)
+                    queue.append(other)
+        groups.append(group)
+
+    # For each group, the total cols = max col_index + 1 among members
+    result: dict[int, tuple[int, int]] = {}
+    for group in groups:
+        total = max(col_map[id(e)] for e in group) + 1
+        for e in group:
+            result[id(e)] = (col_map[id(e)], total)
+
+    return result
 
 
 def _iter_weeks(config: PlannerConfig):
@@ -276,23 +362,23 @@ def _draw_week_arrows(
     prev_iso = prev_start.isocalendar()
     prev_bm = nav.bm_week(prev_iso[0], prev_iso[1])
     if nav.get_page(prev_bm) is not None:
-        c.setFont(font_bold, BODY_SIZE)
+        c.setFont(font_bold, HEADER_SIZE)
         c.setFillColorRGB(*GRAY)
         x = layout.content_right - 30 * mm
         c.drawString(x, y, "<")
-        tw = c.stringWidth("<", font_bold, BODY_SIZE)
-        c.linkAbsolute("prev", prev_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
+        tw = c.stringWidth("<", font_bold, HEADER_SIZE)
+        c.linkAbsolute("prev", prev_bm, (x - 1, y - 1, x + tw + 1, y + HEADER_SIZE + 1))
 
     next_start = week_start + timedelta(days=7)
     next_iso = next_start.isocalendar()
     next_bm = nav.bm_week(next_iso[0], next_iso[1])
     if nav.get_page(next_bm) is not None:
-        c.setFont(font_bold, BODY_SIZE)
+        c.setFont(font_bold, HEADER_SIZE)
         c.setFillColorRGB(*GRAY)
         x = layout.content_right - 20 * mm
         c.drawString(x, y, ">")
-        tw = c.stringWidth(">", font_bold, BODY_SIZE)
-        c.linkAbsolute("next", next_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
+        tw = c.stringWidth(">", font_bold, HEADER_SIZE)
+        c.linkAbsolute("next", next_bm, (x - 1, y - 1, x + tw + 1, y + HEADER_SIZE + 1))
 
 
 def _format_hour_12(hour: int) -> str:

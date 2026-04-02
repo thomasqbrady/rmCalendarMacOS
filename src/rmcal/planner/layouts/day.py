@@ -25,6 +25,7 @@ from rmcal.planner.styles import (
     MEDIUM,
     PageLayout,
     get_font,
+    get_calendar_fill,
 )
 
 
@@ -174,6 +175,7 @@ def _render_day_page(
     c.line(event_x, grid_bottom, layout.content_right, grid_bottom)
 
     # Place timed events
+    tiles = _compute_tile_columns(timed)
     for ev in timed:
         start_hour = ev.start.hour + ev.start.minute / 60.0
         end_hour = ev.end.hour + ev.end.minute / 60.0
@@ -189,28 +191,44 @@ def _render_day_page(
             ev_height = SMALL_SIZE + 2 * mm
             ev_bottom = ev_top - ev_height
 
+        # Tile placement for concurrent events
+        tile_col, tile_total = tiles.get(id(ev), (0, 1))
+        tile_w = (event_w - 2 * mm) / tile_total
+        ev_x = event_x + 1 * mm + tile_col * tile_w
+        ev_w_actual = tile_w - 0.5 * mm
+
         # Event background
-        c.setFillColorRGB(*VERY_LIGHT_GRAY)
-        c.rect(event_x + 1 * mm, ev_bottom, event_w - 2 * mm, ev_height, fill=1, stroke=0)
+        c.setFillColorRGB(*get_calendar_fill(ev.calendar_name))
+        c.rect(ev_x, ev_bottom, ev_w_actual, ev_height, fill=1, stroke=0)
 
         # Event border left
         c.setStrokeColorRGB(*GRAY)
         c.setLineWidth(MEDIUM)
-        c.line(event_x + 1 * mm, ev_bottom, event_x + 1 * mm, ev_top)
+        c.line(ev_x, ev_bottom, ev_x, ev_top)
 
         # Time
         c.setFont(font, SMALL_SIZE)
         c.setFillColorRGB(*GRAY)
         time_str = _format_time(ev.start, config.time_format.value)
         end_str = _format_time(ev.end, config.time_format.value)
-        c.drawString(event_x + 3 * mm, ev_top - SMALL_SIZE - 1 * mm, f"{time_str} – {end_str}")
+        c.drawString(ev_x + 2 * mm, ev_top - SMALL_SIZE - 1 * mm, f"{time_str} – {end_str}")
 
-        # Event name
+        # Event name (with truncation)
         c.setFont(font_bold, BODY_SIZE)
         c.setFillColorRGB(*BLACK)
         name_y = ev_top - SMALL_SIZE - BODY_SIZE - 2 * mm
         if name_y >= ev_bottom + 1 * mm:
-            c.drawString(event_x + 3 * mm, name_y, ev.display_name)
+            name_text = ev.display_name
+            available_w = ev_w_actual - 4 * mm
+            if c.stringWidth(name_text, font_bold, BODY_SIZE) > available_w:
+                for i in range(len(name_text) - 1, 0, -1):
+                    truncated = name_text[:i] + "\u2026"
+                    if c.stringWidth(truncated, font_bold, BODY_SIZE) <= available_w:
+                        name_text = truncated
+                        break
+                else:
+                    name_text = "\u2026"
+            c.drawString(ev_x + 2 * mm, name_y, name_text)
 
             # Link to meeting notes page if one exists
             if meeting_events:
@@ -220,17 +238,17 @@ def _render_day_page(
                     idx = day_meetings.index(ev)
                     mn_bm = nav.bm_meeting_note(d, idx)
                     if nav.get_page(mn_bm) is not None:
-                        tw = c.stringWidth(ev.display_name, font_bold, BODY_SIZE)
+                        tw = c.stringWidth(name_text, font_bold, BODY_SIZE)
                         c.linkAbsolute(
-                            ev.display_name, mn_bm,
-                            (event_x + 3 * mm - 1, ev_bottom, event_x + 3 * mm + tw + 1, ev_top),
+                            name_text, mn_bm,
+                            (ev_x + 2 * mm - 1, ev_bottom, ev_x + 2 * mm + tw + 1, ev_top),
                         )
 
         # Location
         if ev.location and name_y - SMALL_SIZE - 1 * mm >= ev_bottom + 1 * mm:
             c.setFont(font, SMALL_SIZE)
             c.setFillColorRGB(*GRAY)
-            c.drawString(event_x + 3 * mm, name_y - SMALL_SIZE - 1 * mm, ev.location)
+            c.drawString(ev_x + 2 * mm, name_y - SMALL_SIZE - 1 * mm, ev.location)
 
     # Notes area
     notes_top = grid_bottom - 5 * mm
@@ -246,6 +264,59 @@ def _render_day_page(
     while notes_line_y > layout.content_bottom:
         c.line(layout.content_x, notes_line_y, layout.content_right, notes_line_y)
         notes_line_y -= line_spacing
+
+
+def _compute_tile_columns(timed: list[Event]) -> dict[int, tuple[int, int]]:
+    """Compute column assignments for overlapping timed events.
+
+    Returns a dict mapping id(event) to (col_index, total_cols) so that
+    concurrent events can be placed side-by-side.
+    """
+    if not timed:
+        return {}
+
+    # Sort by start time
+    sorted_events = sorted(timed, key=lambda e: e.start)
+
+    # Greedy column assignment
+    # columns[col] = end time of the last event placed in that column
+    columns: list[datetime] = []
+    col_assignment: dict[int, int] = {}
+
+    for ev in sorted_events:
+        placed = False
+        for col_idx, col_end in enumerate(columns):
+            if ev.start >= col_end:
+                columns[col_idx] = ev.end
+                col_assignment[id(ev)] = col_idx
+                placed = True
+                break
+        if not placed:
+            col_assignment[id(ev)] = len(columns)
+            columns.append(ev.end)
+
+    # Group transitively overlapping events
+    # Two events overlap if one starts before the other ends
+    groups: list[list[Event]] = []
+    for ev in sorted_events:
+        if not groups:
+            groups.append([ev])
+            continue
+        last_group = groups[-1]
+        group_end = max(e.end for e in last_group)
+        if ev.start < group_end:
+            last_group.append(ev)
+        else:
+            groups.append([ev])
+
+    # Build result: all events in a group share the same total_cols
+    result: dict[int, tuple[int, int]] = {}
+    for group in groups:
+        total_cols = max(col_assignment[id(e)] for e in group) + 1
+        for e in group:
+            result[id(e)] = (col_assignment[id(e)], total_cols)
+
+    return result
 
 
 def _get_day_events(events: list[Event], d: date) -> list[Event]:
@@ -277,24 +348,24 @@ def _draw_day_nav(
     month_bm = nav.bm_month(d.year, d.month)
     if nav.get_page(month_bm) is not None:
         month_label = month_name_short(lang, d.month)
-        c.setFont(font, SMALL_SIZE)
+        c.setFont(font, BODY_SIZE)
         c.setFillColorRGB(*GRAY)
-        x = layout.content_right - c.stringWidth(month_label, font, SMALL_SIZE)
+        x = layout.content_right - c.stringWidth(month_label, font, BODY_SIZE)
         c.drawString(x, y, month_label)
-        tw = c.stringWidth(month_label, font, SMALL_SIZE)
-        c.linkAbsolute(month_label, month_bm, (x - 1, y - 1, x + tw + 1, y + SMALL_SIZE + 1))
+        tw = c.stringWidth(month_label, font, BODY_SIZE)
+        c.linkAbsolute(month_label, month_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
 
     # Back to week
     iso = d.isocalendar()
     week_bm = nav.bm_week(iso[0], iso[1])
     if nav.get_page(week_bm) is not None:
         week_label = f"W{iso[1]}"
-        c.setFont(font, SMALL_SIZE)
+        c.setFont(font, BODY_SIZE)
         c.setFillColorRGB(*GRAY)
-        x = layout.content_right - c.stringWidth(week_label, font, SMALL_SIZE) - 25 * mm
+        x = layout.content_right - c.stringWidth(week_label, font, BODY_SIZE) - 25 * mm
         c.drawString(x, y, week_label)
-        tw = c.stringWidth(week_label, font, SMALL_SIZE)
-        c.linkAbsolute(week_label, week_bm, (x - 1, y - 1, x + tw + 1, y + SMALL_SIZE + 1))
+        tw = c.stringWidth(week_label, font, BODY_SIZE)
+        c.linkAbsolute(week_label, week_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
 
 
 def _draw_day_arrows(
@@ -310,22 +381,22 @@ def _draw_day_arrows(
     prev_d = d - timedelta(days=1)
     prev_bm = nav.bm_day(prev_d)
     if nav.get_page(prev_bm) is not None:
-        c.setFont(font_bold, BODY_SIZE)
+        c.setFont(font_bold, HEADER_SIZE)
         c.setFillColorRGB(*GRAY)
         x = layout.content_right - 55 * mm
         c.drawString(x, y, "<")
-        tw = c.stringWidth("<", font_bold, BODY_SIZE)
-        c.linkAbsolute("prev", prev_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
+        tw = c.stringWidth("<", font_bold, HEADER_SIZE)
+        c.linkAbsolute("prev", prev_bm, (x - 1, y - 1, x + tw + 1, y + HEADER_SIZE + 1))
 
     next_d = d + timedelta(days=1)
     next_bm = nav.bm_day(next_d)
     if nav.get_page(next_bm) is not None:
-        c.setFont(font_bold, BODY_SIZE)
+        c.setFont(font_bold, HEADER_SIZE)
         c.setFillColorRGB(*GRAY)
         x = layout.content_right - 45 * mm
         c.drawString(x, y, ">")
-        tw = c.stringWidth(">", font_bold, BODY_SIZE)
-        c.linkAbsolute("next", next_bm, (x - 1, y - 1, x + tw + 1, y + BODY_SIZE + 1))
+        tw = c.stringWidth(">", font_bold, HEADER_SIZE)
+        c.linkAbsolute("next", next_bm, (x - 1, y - 1, x + tw + 1, y + HEADER_SIZE + 1))
 
 
 def _format_time(dt: datetime, fmt: str) -> str:
