@@ -55,6 +55,21 @@ def render_meeting_notes_page(
     y -= SMALL_SIZE
     c.drawString(layout.content_x, y, meta_line)
 
+    # --- Back to day link (right-aligned on meta line) ---
+    day_bm = nav.bm_day(d)
+    day_page = nav.get_page(day_bm)
+    if day_page is not None:
+        link_text = f"< Back to {d.strftime('%b %d')}"
+        link_w = c.stringWidth(link_text, font, SMALL_SIZE)
+        link_x = layout.content_right - link_w
+        c.setFont(font, SMALL_SIZE)
+        c.setFillColorRGB(*GRAY)
+        c.drawString(link_x, y, link_text)
+        c.linkAbsolute(
+            link_text, day_bm,
+            (link_x, y - 1 * mm, link_x + link_w, y + SMALL_SIZE),
+        )
+
     # --- Meeting name (large bold) ---
     y -= HEADER_SIZE + 4 * mm
     c.setFont(font_bold, HEADER_SIZE)
@@ -89,21 +104,6 @@ def render_meeting_notes_page(
     c.setStrokeColorRGB(*LIGHT_GRAY)
     c.setLineWidth(THIN)
     c.line(layout.content_x, y, layout.content_right, y)
-
-    # --- Back to day link ---
-    y -= TINY_SIZE + 2 * mm
-    c.setFont(font, TINY_SIZE)
-    c.setFillColorRGB(*GRAY)
-    day_bm = nav.bm_day(d)
-    day_page = nav.get_page(day_bm)
-    if day_page is not None:
-        link_text = f"< Back to {d.strftime('%b %d')}"
-        c.drawString(layout.content_x, y, link_text)
-        tw = c.stringWidth(link_text, font, TINY_SIZE)
-        c.linkAbsolute(
-            link_text, day_bm,
-            (layout.content_x, y - 1 * mm, layout.content_x + tw, y + TINY_SIZE),
-        )
 
     # --- Lined notes area ---
     notes_top = y - 4 * mm
