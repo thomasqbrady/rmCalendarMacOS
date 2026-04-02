@@ -211,16 +211,15 @@ def _render_day_page(
         text_x = ev_x + 2 * mm
         time_str = _format_time(ev.start, config.time_format.value)
         end_str = _format_time(ev.end, config.time_format.value)
-        time_text = _truncate(c, f"{time_str} - {end_str}", available_w, font, SMALL_SIZE)
-
-        # Always show the event name — it's the most important element.
-        # Layout priority: name > time > location.
-        line1_y = ev_top - SMALL_SIZE - 1 * mm
-        line2_y = ev_top - SMALL_SIZE - BODY_SIZE - 2 * mm
-        line3_y = line2_y - SMALL_SIZE - 1 * mm
 
         name_text = _sanitize(ev.display_name)
-        name_text = _truncate(c, name_text, available_w, font_bold, BODY_SIZE)
+
+        # Adaptive font sizing based on available event height.
+        # We have 3 size tiers: normal (2-3 lines), compact (2 lines), tiny (1 line).
+        pad = 1 * mm
+        normal_2line = SMALL_SIZE + BODY_SIZE + 3 * pad
+        compact_2line = TINY_SIZE + SMALL_SIZE + 3 * pad
+        single_line = SMALL_SIZE + 2 * pad
 
         # Clip all text to the event rect so nothing overflows
         c.saveState()
@@ -228,8 +227,14 @@ def _render_day_page(
         clip.rect(ev_x, ev_bottom, ev_w_actual, ev_height)
         c.clipPath(clip, stroke=0)
 
-        if line2_y >= ev_bottom + 1 * mm:
-            # Enough room for time on line 1, name on line 2
+        if ev_height >= normal_2line:
+            # Normal: time (SMALL) + name (BODY) + optional location
+            time_text = _truncate(c, f"{time_str} - {end_str}", available_w, font, SMALL_SIZE)
+            name_text = _truncate(c, name_text, available_w, font_bold, BODY_SIZE)
+            line1_y = ev_top - SMALL_SIZE - pad
+            line2_y = line1_y - BODY_SIZE - pad
+            line3_y = line2_y - SMALL_SIZE - pad
+
             c.setFont(font, SMALL_SIZE)
             c.setFillColorRGB(*GRAY)
             c.drawString(text_x, line1_y, time_text)
@@ -238,20 +243,33 @@ def _render_day_page(
             c.setFillColorRGB(*BLACK)
             c.drawString(text_x, line2_y, name_text)
 
-            # Location on line 3 if it fits
-            if ev.location and line3_y >= ev_bottom + 1 * mm:
+            if ev.location and line3_y >= ev_bottom + pad:
                 loc_text = _sanitize(ev.location)
                 loc_text = _truncate(c, loc_text, available_w, font, SMALL_SIZE)
                 c.setFont(font, SMALL_SIZE)
                 c.setFillColorRGB(*GRAY)
                 c.drawString(text_x, line3_y, loc_text)
+
+        elif ev_height >= compact_2line:
+            # Compact: time (TINY) + name (SMALL)
+            time_text = _truncate(c, f"{time_str} - {end_str}", available_w, font, TINY_SIZE)
+            name_text = _truncate(c, name_text, available_w, font_bold, SMALL_SIZE)
+            line1_y = ev_top - TINY_SIZE - pad
+            line2_y = line1_y - SMALL_SIZE - pad
+
+            c.setFont(font, TINY_SIZE)
+            c.setFillColorRGB(*GRAY)
+            c.drawString(text_x, line1_y, time_text)
+
+            c.setFont(font_bold, SMALL_SIZE)
+            c.setFillColorRGB(*BLACK)
+            c.drawString(text_x, line2_y, name_text)
+
         else:
-            # Only room for one line — show name (shrink if needed)
-            size = BODY_SIZE
-            if c.stringWidth(name_text, font_bold, size) > available_w:
-                size = SMALL_SIZE
-                name_text = _truncate(c, _sanitize(ev.display_name), available_w, font_bold, size)
-            c.setFont(font_bold, size)
+            # Tiny: just the name, smallest readable size
+            name_text = _truncate(c, name_text, available_w, font_bold, TINY_SIZE)
+            line1_y = ev_top - TINY_SIZE - pad
+            c.setFont(font_bold, TINY_SIZE)
             c.setFillColorRGB(*BLACK)
             c.drawString(text_x, line1_y, name_text)
 
@@ -345,6 +363,10 @@ def _sanitize(text: str) -> str:
 
     out: list[str] = []
     for ch in text:
+        # Replace control characters (newlines, tabs, etc.) with space
+        if unicodedata.category(ch).startswith("C"):
+            out.append(" ")
+            continue
         try:
             ch.encode("latin-1")
             out.append(ch)

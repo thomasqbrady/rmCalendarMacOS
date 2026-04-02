@@ -247,6 +247,10 @@ def _sanitize(text: str) -> str:
 
     out: list[str] = []
     for ch in text:
+        # Replace control characters (newlines, tabs, etc.) with space
+        if unicodedata.category(ch).startswith("C"):
+            out.append(" ")
+            continue
         try:
             ch.encode("latin-1")
             out.append(ch)
