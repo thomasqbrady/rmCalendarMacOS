@@ -43,26 +43,10 @@ On first launch you'll be guided through:
 1. **Cloud registration** -- paste a one-time code from [my.remarkable.com](https://my.remarkable.com/device/remarkable?showOtp=true)
 2. **Calendar selection** -- pick which macOS calendars to include
 3. **Meeting notes** -- choose which calendars should generate per-meeting notes pages
-4. **Upload** -- the planner is generated and synced to your reMarkable
+4. **Auto-sync** -- optionally enable a background daemon that syncs every 5 minutes
+5. **Upload** -- the planner is generated and synced to your reMarkable
 
 macOS will prompt for calendar access automatically.
-
-## Auto-Sync
-
-Enable background sync so your planner stays current:
-
-```bash
-rmcal daemon install
-```
-
-This installs a macOS launchd daemon that runs `rmcal sync` every 5 minutes. No terminal window needed -- it runs silently in the background, even after reboot.
-
-```bash
-rmcal daemon status      # Check if the daemon is running
-rmcal daemon uninstall   # Stop and remove the daemon
-```
-
-You can also manage the daemon from the TUI by pressing `d` on the calendar selection screen.
 
 ## Commands
 
@@ -96,6 +80,8 @@ You can also manage the daemon from the TUI by pressing `d` on the calendar sele
 4. The daemon repeats this every 5 minutes, so new meetings appear and deleted ones are cleaned up
 
 Annotations are preserved using a page-manifest system: each page is tracked by its bookmark identity (e.g. "day-2026-04-07", "meeting-2026-04-07-0"). When pages shift because meetings are added or removed, rmcal remaps your annotations to the correct page. If a meeting page is deleted but had annotations, a blank carrier page is inserted at the original position so your notes aren't lost.
+
+Meeting notes pages are only generated for events within 2 weeks of today. Past meeting notes pages with no annotations are automatically pruned on each sync, so the document doesn't keep growing indefinitely.
 
 ## Requirements
 
