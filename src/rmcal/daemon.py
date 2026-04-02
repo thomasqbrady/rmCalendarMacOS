@@ -31,13 +31,38 @@ def is_daemon_running() -> bool:
         return False
 
 
-def install_daemon(document_name: str = "rmCalendar") -> None:
-    """Install and load the launchd plist for 15-minute auto-sync."""
-    python_path = sys.executable
+def _stable_bin_path(name: str) -> str | None:
+    """Find a Homebrew-stable path for a binary, avoiding versioned Cellar paths.
 
-    # Prefer the installed 'rmcal' command; fall back to 'python -m rmcal'
-    rmcal_bin = shutil.which("rmcal")
+    Versioned Cellar paths (e.g. /opt/homebrew/Cellar/rmcal/0.1.16/…) break
+    after ``brew reinstall``.  Prefer the stable symlink under the Homebrew
+    prefix (e.g. /opt/homebrew/bin/rmcal) which survives upgrades.
+    """
+    raw = shutil.which(name)
+    if raw is None:
+        return None
+    raw_path = Path(raw)
+    # If the binary lives inside a Cellar dir, try the stable prefix symlink
+    if "Cellar" in raw_path.parts:
+        try:
+            prefix = subprocess.run(
+                ["brew", "--prefix"], capture_output=True, text=True,
+            ).stdout.strip()
+        except OSError:
+            prefix = "/opt/homebrew"
+        stable = Path(prefix) / "bin" / name
+        if stable.exists():
+            return str(stable)
+    return str(raw_path)
+
+
+def install_daemon(document_name: str = "rmCalendar") -> None:
+    """Install and load the launchd plist for 5-minute auto-sync."""
+    # Use stable symlink paths that survive brew upgrades
+    rmcal_bin = _stable_bin_path("rmcal")
+
     if rmcal_bin:
+        bin_dir = str(Path(rmcal_bin).parent)
         program_args = f"""    <array>
         <string>{rmcal_bin}</string>
         <string>--name</string>
@@ -45,6 +70,8 @@ def install_daemon(document_name: str = "rmCalendar") -> None:
         <string>sync</string>
     </array>"""
     else:
+        python_path = sys.executable
+        bin_dir = str(Path(python_path).parent)
         program_args = f"""    <array>
         <string>{python_path}</string>
         <string>-m</string>
@@ -73,7 +100,7 @@ def install_daemon(document_name: str = "rmCalendar") -> None:
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:{Path(python_path).parent}</string>
+        <string>/usr/local/bin:/usr/bin:/bin:{bin_dir}</string>
     </dict>
 </dict>
 </plist>
