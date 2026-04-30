@@ -273,13 +273,16 @@ class RemarkableCloud:
             "rm-filename": filename or blob_hash,
             "x-goog-hash": f"crc32c={crc}",
         }
-        if schema >= 4 and filename.endswith(".docSchema"):
+        if filename.endswith(".docSchema"):
             headers["content-type"] = "text/plain; charset=UTF-8"
         resp = self._authed_request(
             "PUT", f"{RAW_HOST}/sync/v3/files/{blob_hash}",
             content=data, headers=headers,
         )
-        resp.raise_for_status()
+        if not resp.is_success:
+            raise RuntimeError(
+                f"Failed to upload blob {blob_hash} (HTTP {resp.status_code}): {resp.text[:500]}"
+            )
 
     def _put_root_hash(self, root_hash: str, generation: int) -> tuple[str, int]:
         """Update the root hash. Returns (new_hash, new_generation)."""
@@ -326,14 +329,12 @@ class RemarkableCloud:
             return 3
 
     def _hash_index(self, entries: list[RawEntry], blob: bytes, schema: int) -> str:
-        """Compute the index hash using the appropriate algorithm for the schema.
+        """Compute the index blob key: SHA-256 of the serialized blob content.
 
-        v3: SHA-256 of concatenated binary entry hashes (hash-of-hashes).
-        v4: SHA-256 of the entire serialized index blob (content hash).
+        The Tectonic API (GCS) validates that the URL path hash == SHA-256(content),
+        so we always use the content hash regardless of schema version.
         """
-        if schema >= 4:
-            return _hash_blob_v4(blob)
-        return _hash_entries_v3(entries)
+        return _sha256(blob)
 
     # --- Public API ---
 
