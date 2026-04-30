@@ -19,6 +19,13 @@ from pathlib import Path
 
 import httpx
 
+_TRANSIENT_ERRORS = (
+    httpx.ReadError,
+    httpx.ConnectError,
+    httpx.RemoteProtocolError,
+    httpx.TimeoutException,
+)
+
 AUTH_HOST = "https://webapp-prod.cloud.remarkable.engineering"
 RAW_HOST = "https://eu.tectonic.remarkable.com"
 UPLOAD_HOST = "https://internal.cloud.remarkable.com"
@@ -220,13 +227,23 @@ class RemarkableCloud:
     def _authed_request(
         self, method: str, url: str, retry_auth: bool = True, **kwargs
     ) -> httpx.Response:
-        headers = {**self._auth_headers(), **kwargs.pop("headers", {})}
-        resp = self._client.request(method, url, headers=headers, **kwargs)
-        if resp.status_code == 401 and retry_auth:
-            self._refresh_user_token()
-            headers = {**self._auth_headers(), **kwargs.pop("headers", {})}
-            resp = self._client.request(method, url, headers=headers, **kwargs)
-        return resp
+        extra_headers = kwargs.pop("headers", {})
+        max_attempts = 4
+        for attempt in range(max_attempts):
+            headers = {**self._auth_headers(), **extra_headers}
+            try:
+                resp = self._client.request(method, url, headers=headers, **kwargs)
+            except _TRANSIENT_ERRORS:
+                if attempt == max_attempts - 1:
+                    raise
+                time.sleep(2 ** attempt)
+                continue
+            if resp.status_code == 401 and retry_auth:
+                self._refresh_user_token()
+                headers = {**self._auth_headers(), **extra_headers}
+                resp = self._client.request(method, url, headers=headers, **kwargs)
+            return resp
+        raise RuntimeError("unreachable")
 
     # --- Low-level blob operations (tectonic protocol) ---
 
