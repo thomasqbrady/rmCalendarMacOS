@@ -211,17 +211,26 @@ class TestParseEntries:
 # ---------------------------------------------------------------------------
 
 class TestHashIndex:
-    def test_v3_uses_entry_hash_algorithm(self):
+    def test_v3_uses_content_hash(self):
+        """v3 index blobs must use SHA-256(content) as the key so GCS accepts the PUT."""
         cloud = _make_cloud()
         entries = _sample_file_entries()
         blob = _build_entries_blob(entries, schema=3)
-        assert cloud._hash_index(entries, blob, schema=3) == V3_GOLDEN_HASH
+        assert cloud._hash_index(entries, blob, schema=3) == _sha256(blob)
 
-    def test_v4_uses_content_hash_algorithm(self):
+    def test_v4_uses_content_hash(self):
         cloud = _make_cloud()
         entries = _sample_file_entries()
         blob = _build_entries_blob(entries, schema=4)
-        assert cloud._hash_index(entries, blob, schema=4) == V4_GOLDEN_HASH
+        assert cloud._hash_index(entries, blob, schema=4) == _sha256(blob)
+
+    def test_v3_and_v4_hashes_differ_because_blobs_differ(self):
+        """v3 and v4 blobs have different content, so their SHA-256 hashes differ."""
+        entries = _sample_file_entries()
+        blob_v3 = _build_entries_blob(entries, schema=3)
+        blob_v4 = _build_entries_blob(entries, schema=4)
+        cloud = _make_cloud()
+        assert cloud._hash_index(entries, blob_v3, schema=3) != cloud._hash_index(entries, blob_v4, schema=4)
 
 
 # ---------------------------------------------------------------------------
@@ -328,10 +337,7 @@ class TestDoUpdate:
 
         doc_entry_type = _root_entry_type(schema_version)
         doc_index_blob = _build_entries_blob(file_entries, schema_version)
-        if schema_version >= 4:
-            doc_index_hash = _hash_blob_v4(doc_index_blob)
-        else:
-            doc_index_hash = _hash_entries_v3(file_entries)
+        doc_index_hash = _sha256(doc_index_blob)
 
         root_entries = [
             RawEntry(hash=doc_index_hash, entry_type=doc_entry_type, entry_id=doc_id, subfiles=3),
@@ -411,21 +417,26 @@ class TestDoUpdate:
     def test_v4_hash_equals_content_hash_of_blob(self, tmp_path: Path):
         """v4 hashes must be SHA-256 of the serialized blob itself."""
         uploaded = self._run_update(4, tmp_path)
-
         for filename in ("root.docSchema",):
             blob_hash, blob_data = uploaded[filename]
             assert blob_hash == _sha256(blob_data), f"{filename} hash mismatch"
-
         doc_key = [k for k in uploaded if k.endswith(".docSchema") and k != "root.docSchema"][0]
         doc_hash, doc_data = uploaded[doc_key]
         assert doc_hash == _sha256(doc_data)
 
-    def test_v3_hash_differs_from_content_hash(self, tmp_path: Path):
-        """v3 uses hash-of-hashes, NOT content hash of the blob."""
+    def test_v3_hash_equals_content_hash_of_blob(self, tmp_path: Path):
+        """v3 index blobs must also use SHA-256(content) as the key.
+
+        The Tectonic API validates URL hash == SHA-256(content), so using
+        hash-of-hashes for v3 index blobs causes a 400 Bad Request.
+        """
         uploaded = self._run_update(3, tmp_path)
+        for filename in ("root.docSchema",):
+            blob_hash, blob_data = uploaded[filename]
+            assert blob_hash == _sha256(blob_data), f"{filename} hash mismatch"
         doc_key = [k for k in uploaded if k.endswith(".docSchema") and k != "root.docSchema"][0]
         doc_hash, doc_data = uploaded[doc_key]
-        assert doc_hash != _sha256(doc_data)
+        assert doc_hash == _sha256(doc_data)
 
     def test_preserves_annotation_files(self, tmp_path: Path):
         """Annotation .rm files must appear in the new index but not be re-uploaded."""
@@ -474,6 +485,7 @@ class TestPutBlobContentType:
             captured.update(kwargs.get("headers", {}))
             resp = MagicMock()
             resp.status_code = 200
+            resp.is_success = True
             resp.raise_for_status = MagicMock()
             return resp
 
@@ -486,9 +498,10 @@ class TestPutBlobContentType:
         headers = self._capture_put_blob_headers("root.docSchema", schema=4)
         assert headers.get("content-type") == "text/plain; charset=UTF-8"
 
-    def test_v3_schema_blob_has_no_content_type_override(self):
+    def test_v3_schema_blob_has_text_plain_content_type(self):
+        """v3 docSchema blobs also need Content-Type: text/plain."""
         headers = self._capture_put_blob_headers("root.docSchema", schema=3)
-        assert "content-type" not in headers
+        assert headers.get("content-type") == "text/plain; charset=UTF-8"
 
     def test_v4_pdf_blob_has_no_content_type_override(self):
         headers = self._capture_put_blob_headers("doc.pdf", schema=4)
