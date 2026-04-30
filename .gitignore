@@ -35,3 +35,6 @@ output/
 
 # Daemon logs
 daemon.log
+
+# Claude Code worktrees
+.claude/worktrees/
